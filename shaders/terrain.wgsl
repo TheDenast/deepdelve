@@ -48,10 +48,12 @@ const MACRO_TILE: f32 = 2048.0;
 // Texture layers this shader treats specially. A test in block.rs keeps these in step.
 const L_GRASS: u32 = 3u;
 const L_GRASS_SIDE: u32 = 4u;
+const L_LOG_SIDE: u32 = 7u;
 const L_LEAVES: u32 = 9u;
 const L_LAVA: u32 = 14u;
 const L_DARK_GRASS: u32 = 15u;
 const L_DARK_GRASS_SIDE: u32 = 16u;
+const L_PINE_LOG_SIDE: u32 = 21u;
 const L_PINE_NEEDLES: u32 = 23u;
 const L_EMBER: u32 = 25u;
 
@@ -83,6 +85,8 @@ struct VOut {
     @location(5) @interpolate(flat) liquid_y: f32,
     @location(6) @interpolate(flat) flags: u32,
     @location(7) @interpolate(flat) crystal: vec4<f32>,
+    // World position of the chunk's corner, measured the same way as uv.
+    @location(8) @interpolate(flat) uv_base: vec2<i32>,
 }
 
 fn light_byte(info_slot: u32, i: u32) -> f32 {
@@ -158,14 +162,44 @@ fn decode(vi: u32) -> Decoded {
     d.ao = AO_CURVE[(ao_bits >> (corner * 2u)) & 3u];
     d.layer = q.b & 255u;
     d.emissive = (q.b >> 16u) & 1u;
-    if dir <= 1u {
-        d.uv = vec2<f32>(local.z, -local.y);
-    } else if dir >= 4u {
-        d.uv = vec2<f32>(local.x, -local.y);
-    } else {
-        d.uv = vec2<f32>(local.x, local.z);
-    }
+    d.uv = face_uv(dir, local);
     return d;
+}
+
+fn face_uv(dir: u32, p: vec3<f32>) -> vec2<f32> {
+    if dir <= 1u {
+        return vec2<f32>(p.z, -p.y);
+    } else if dir >= 4u {
+        return vec2<f32>(p.x, -p.y);
+    }
+    return vec2<f32>(p.x, p.z);
+}
+
+// Turns and flips each block's texture differently, so that the eye can't pick out a repeat.
+// Merged faces cover many blocks, so this has to be decided per pixel. Textures tile, so
+// turning the coordinates themselves turns the texture within every block.
+fn block_orientation(in: VOut) -> mat2x2<f32> {
+    // Wrapped like the camera, so a block keeps its orientation when the camera's wrap jumps.
+    var cell = bitcast<vec2<u32>>(in.uv_base + vec2<i32>(floor(in.uv))) & vec2<u32>(2047u);
+    // These have a definite up, so they can only be mirrored. A whole column mirrors together,
+    // or the grooves in bark would break at every block.
+    let upright = in.layer == L_GRASS_SIDE || in.layer == L_DARK_GRASS_SIDE
+        || in.layer == L_LOG_SIDE || in.layer == L_PINE_LOG_SIDE;
+    if upright {
+        cell.y = 0u;
+    }
+    var h = (cell.x * 0x8DA6B343u) ^ (cell.y * 0xD8163841u) ^ ((in.flags & 7u) * 0xCB1AB31Fu);
+    h = (h ^ (h >> 13u)) * 0x5BD1E995u;
+    h ^= h >> 15u;
+    let flip_u = select(1.0, -1.0, (h & 1u) == 1u);
+    if upright {
+        return mat2x2<f32>(flip_u, 0.0, 0.0, 1.0);
+    }
+    let flip_v = select(1.0, -1.0, (h & 2u) == 2u);
+    if (h & 4u) == 4u {
+        return mat2x2<f32>(0.0, flip_v, flip_u, 0.0);
+    }
+    return mat2x2<f32>(flip_u, 0.0, 0.0, flip_v);
 }
 
 @vertex
@@ -178,6 +212,7 @@ fn vs_opaque(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -
     var out: VOut;
     out.clip = globals.view_proj * vec4<f32>(rel, 1.0);
     out.uv = d.uv * info.scale;
+    out.uv_base = vec2<i32>(round(face_uv(d.dir, draw.origin + globals.cam_wrapped.xyz)));
     out.rel = rel;
     out.layer = d.layer;
     out.tint = unpack_tint(info.tint);
@@ -203,7 +238,10 @@ fn apply_fog(color: vec3<f32>, dist: f32, weight: f32) -> vec3<f32> {
 @fragment
 fn fs_opaque(in: VOut) -> @location(0) vec4<f32> {
     let dist = length(in.rel);
-    var base = textureSample(tex, tex_sampler, in.uv, in.layer).rgb;
+    let turn = block_orientation(in);
+    // The coordinates jump at block edges. Automatic detail selection would read that as extreme
+    // minification and draw a line along every edge, so it gets the smooth rates of change instead.
+    var base = textureSampleGrad(tex, tex_sampler, turn * in.uv, in.layer, turn * dpdx(in.uv), turn * dpdy(in.uv)).rgb;
     let wrapped = (in.rel + globals.cam_wrapped.xyz) / MACRO_TILE;
     let m = textureSample(macro_tex, macro_sampler, wrapped.xz + wrapped.y * 0.37).rg;
     // Large-scale colour drift hides the texture repeat from far away.

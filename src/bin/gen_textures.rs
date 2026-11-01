@@ -168,6 +168,40 @@ impl Canvas {
         }
     }
 
+    /// Takes out the tile's broad light and dark areas, and keeps its fine detail. Those areas
+    /// are what the eye follows across many blocks: as rows when every block is the same, or
+    /// as a grid along block edges when blocks are turned at random.
+    fn even_out(mut self) -> Self {
+        const RADIUS: i32 = 3;
+        // One pass leaves a little of the shading behind, because a blur only partly finds it.
+        const PASSES: usize = 3;
+        let luma = |c: Rgb| c[0] * 0.3 + c[1] * 0.6 + c[2] * 0.1;
+        let at = |v: &[f32], x: i32, y: i32| {
+            let (x, y) = (x.rem_euclid(SIZE as i32), y.rem_euclid(SIZE as i32));
+            v[(y as u32 * SIZE + x as u32) as usize]
+        };
+        for _ in 0..PASSES {
+            let mut soft: Vec<f32> = self.0.iter().map(|c| luma(*c)).collect();
+            // Blurring twice along each axis is close to a smooth round blur.
+            for (dx, dy) in [(1, 0), (0, 1), (1, 0), (0, 1)] {
+                let before = soft.clone();
+                for y in 0..SIZE as i32 {
+                    for x in 0..SIZE as i32 {
+                        let sum: f32 = (-RADIUS..=RADIUS)
+                            .map(|k| at(&before, x + k * dx, y + k * dy))
+                            .sum();
+                        soft[(y as u32 * SIZE + x as u32) as usize] = sum / (RADIUS * 2 + 1) as f32;
+                    }
+                }
+            }
+            let mean = soft.iter().sum::<f32>() / soft.len() as f32;
+            for (c, s) in self.0.iter_mut().zip(&soft) {
+                *c = c.map(|v| v * mean / s);
+            }
+        }
+        self
+    }
+
     fn image(&self) -> RgbaImage {
         let mut img = RgbaImage::new(SIZE, SIZE);
         for y in 0..SIZE {
@@ -200,6 +234,7 @@ fn rock(colors: &[Rgb], crack: Rgb, salt: u32) -> Canvas {
         }
         grain(c, x, y, 0.07, salt + 50)
     })
+    .even_out()
 }
 
 fn stone() -> Canvas {
@@ -272,6 +307,7 @@ fn ash() -> Canvas {
         }
         grain(c, x, y, 0.08, 420)
     })
+    .even_out()
 }
 
 /// Jagged and high-contrast on purpose, so it reads as something unlike rock.
@@ -354,6 +390,7 @@ fn soil(colors: &[Rgb], pebble: Rgb, salt: u32) -> Canvas {
         }
         grain(c, x, y, 0.09, salt + 20)
     })
+    .even_out()
 }
 
 fn dirt() -> Canvas {
@@ -379,7 +416,7 @@ fn turf(colors: &[Rgb], blades: &[Rgb], salt: u32) -> Canvas {
         grain(ramp(colors, t), x, y, 0.06, salt + 10)
     });
     c.strokes(90, 3, (0, -1), blades, salt + 20);
-    c
+    c.even_out()
 }
 
 const GRASS_GREENS: [Rgb; 4] = [rgb(0x47803A), rgb(0x548F40), rgb(0x629E47), rgb(0x72AB50)];
@@ -436,6 +473,7 @@ fn sand() -> Canvas {
         }
         grain(c, x, y, 0.04, 930)
     })
+    .even_out()
 }
 
 /// Wet shore stones for the dark forest's ponds.
@@ -693,4 +731,69 @@ fn save_sheet(textures: &[(&str, Canvas)], path: &str) {
         }
     }
     sheet.save(path).expect("save sheet");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// How far the brightest and darkest 8x8 areas of a tile are from each other, as a share
+    /// of its average brightness.
+    fn patchiness(c: &Canvas) -> f32 {
+        let mut patches = Vec::new();
+        for py in 0..4 {
+            for px in 0..4 {
+                let mut sum = 0.0;
+                for y in 0..8 {
+                    for x in 0..8 {
+                        let p = c.get(px * 8 + x, py * 8 + y);
+                        sum += p[0] * 0.3 + p[1] * 0.6 + p[2] * 0.1;
+                    }
+                }
+                patches.push(sum / 64.0);
+            }
+        }
+        let max = patches.iter().copied().fold(f32::MIN, f32::max);
+        let min = patches.iter().copied().fold(f32::MAX, f32::min);
+        (max - min) / (patches.iter().sum::<f32>() / patches.len() as f32)
+    }
+
+    #[test]
+    fn evening_out_removes_broad_shading_and_keeps_fine_detail() {
+        let shaded = || {
+            Canvas::paint(|x, _, u, _| {
+                let broad = 0.5 + 0.25 * (std::f32::consts::TAU * u).sin();
+                let fine = if x % 2 == 0 { 1.1 } else { 0.9 };
+                [broad * fine; 3]
+            })
+        };
+        let evened = shaded().even_out();
+        assert!(patchiness(&shaded()) > 0.5);
+        assert!(patchiness(&evened) < 0.05);
+        let contrast = evened.get(8, 0)[0] / evened.get(9, 0)[0];
+        assert!(contrast > 1.15, "fine detail lost: {contrast}");
+    }
+
+    #[test]
+    fn ground_textures_have_no_broad_light_and_dark_areas() {
+        let ground = [
+            ("grass", grass()),
+            ("dark_grass", dark_grass()),
+            ("dirt", dirt()),
+            ("dark_dirt", dark_dirt()),
+            ("sand", sand()),
+            ("stone", stone()),
+            ("slate", slate()),
+            ("ash", ash()),
+        ];
+        let report: Vec<String> = ground
+            .iter()
+            .map(|(name, tile)| format!("{name} {:.3}", patchiness(tile)))
+            .collect();
+        let worst = ground
+            .iter()
+            .map(|(_, tile)| patchiness(tile))
+            .fold(0.0, f32::max);
+        assert!(worst < 0.12, "too patchy: {report:?}");
+    }
 }

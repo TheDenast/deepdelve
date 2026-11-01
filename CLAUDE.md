@@ -92,6 +92,9 @@ a release: only `play release` does, and it refuses to run with uncommitted chan
 - **Textures are code.** Paint them in `src/bin/gen_textures.rs`, regenerate, and commit the PNGs.
   Never edit the PNGs by hand. New ones also need a line in `texture_layers!` in
   `src/world/block.rs`, and a test checks any layer numbers `shaders/terrain.wgsl` relies on.
+- **Every block texture gets turned and flipped at random.** One with a definite up must be added
+  to the `upright` list in `block_orientation` in `shaders/terrain.wgsl`. Large even surfaces also
+  need `.even_out()` in their painter, or the turned blocks form a visible grid.
 - **Scrolling texture scales must repeat a whole number of times per 32 blocks** (k/32), because
   UVs restart at each chunk. Anything else leaves seams at chunk borders.
 - **Surfaces shared across detail levels sit on multiples of 16,** the largest voxel, like the

@@ -16,6 +16,7 @@ with features, one request at a time.
 - Lava, as a second liquid.
 - Every texture regenerated from code.
 - Level plains between the hills in the Overworld and Dark Forest, with calmer ground overall.
+- Each block's texture gets a random orientation, and ground textures are evened out, to hide repeats.
 - The version number hasn't been bumped, so these builds still call themselves `a0.1.0`. Packaged
   builds show that exactly, and cargo builds show `a0.1.0-dev`.
 
@@ -27,6 +28,8 @@ with features, one request at a time.
   or too bright on a real display.
 - **The three layers haven't been checked in a real window,** only off-screen.
 - **The world's underside is very dim** when seen from the void below.
+- **Ground may now look too plain.** Evening out made grass and sand much smoother from a distance.
+  If so, lower `PASSES` in `Canvas::even_out`, though the repeat will start to come back.
 - **The plains are only tuned from screenshots.** Their share and flatness may need adjusting after
   playing: see `Ground` in the themes. Ramps between shelves can look like straight stripes from
   high up, and the Dark Forest's trees hide most of its ground.

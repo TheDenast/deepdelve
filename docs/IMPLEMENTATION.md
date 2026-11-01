@@ -81,7 +81,9 @@ shape depend only on the seed, so both chunks agree on it.
 
 **Textures** come from `cargo run --release --bin gen_textures`, and the results are committed.
 Adding one means painting it there and adding one line to `texture_layers!` in `block.rs`. If the
-shader needs its number, a test keeps `terrain.wgsl` in step.
+shader needs its number, a test keeps `terrain.wgsl` in step. `Canvas::even_out` removes broad light
+and dark areas from ground and rock tiles, keeping their fine detail, because those areas are what
+the eye follows across many blocks.
 
 Everything uses f64 for absolute horizontal positions and f32 only for offsets. The world
 works unchanged 20 million blocks from the origin, which was checked by test screenshot.
@@ -122,6 +124,15 @@ each chunk direction costs one multi-draw entry, with no state changes or per-ch
 4. Water, back to front. It reads a copy of the opaque depth, so absorption follows how deep
    the water really is at each pixel.
 5. Bloom chain, then composite with a filmic tonemap, upscaled to the window, HUD on top.
+
+**Texture orientation** hides repeats. `block_orientation` in `terrain.wgsl` hashes each block's
+world position into one of 8 turns and flips. It has to happen per pixel, because merged quads cover
+many blocks. It also needs `textureSampleGrad`: the coordinates jump at block edges, and automatic
+mip selection would draw a line along each one. Textures with a definite up (grass sides, bark) only
+mirror, per column so that bark's grooves stay unbroken. Water and lava aren't affected. This costs
+about 0.3-0.65 ms of GPU time per frame on the 780M at 2560x1440, from runs alternating with and
+without it. Chunk generation time is a useful check when benchmarks disagree: it doesn't depend on
+the shader, so if it moved too, the machine was busy.
 
 **Lava** goes through the water path: it has the same top-face snapping and the same pass, but
 writes solid glowing colour. Its pattern is warped by large-scale noise, because a repeating
@@ -169,9 +180,9 @@ blocks/s row above:
 
 | Layer | Frame mean | p99 | GPU terrain | Quads stored |
 | --- | --- | --- | --- | --- |
-| Overworld | 7.6 ms | 15.8 | 2.7 ms | 8.4M |
-| Dark Forest | 10.0 ms | 19.0 | 4.2 ms | 14M |
-| Underworld | 8.2 ms | 16.0 | 2.9 ms | 10M |
+| Overworld | 8.1 ms | 15-17 | 3.1 ms | 8.4M |
+| Dark Forest | 11.4 ms | 21 | 5.2 ms | 14M |
+| Underworld | 8.7 ms | 17 | 3.3 ms | 10M |
 
 A real window can be tested with no display of your own, inside weston:
 

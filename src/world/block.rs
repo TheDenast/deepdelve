@@ -144,9 +144,11 @@ mod tests {
         let layers = [
             ("L_GRASS", L_GRASS),
             ("L_GRASS_SIDE", L_GRASS_SIDE),
+            ("L_LOG_SIDE", L_LOG_SIDE),
             ("L_LEAVES", L_LEAVES),
             ("L_DARK_GRASS", L_DARK_GRASS),
             ("L_DARK_GRASS_SIDE", L_DARK_GRASS_SIDE),
+            ("L_PINE_LOG_SIDE", L_PINE_LOG_SIDE),
             ("L_PINE_NEEDLES", L_PINE_NEEDLES),
             ("L_EMBER", L_EMBER),
             ("L_LAVA", L_LAVA),
