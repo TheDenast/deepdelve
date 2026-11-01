@@ -29,6 +29,9 @@ so work done after `a0.1.0` shows as `a0.1.0-dev` even though it's newer.
 
 ## Making a release
 
+The user decides when there's a new release. Ordinary commits happen freely along the way, as
+described under Git in `CLAUDE.md`.
+
 Versions look like `a0.2.0`: the middle number is for content updates and the last for fixes.
 
 1. Set the version in `Cargo.toml`, and run `cargo build` to update `Cargo.lock`.

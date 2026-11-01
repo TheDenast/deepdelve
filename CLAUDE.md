@@ -61,8 +61,16 @@ change, not a separate task:
 
 ## Git
 
-Work so far has gone straight onto `main`. Commit, tag or push only when asked. Commits never make
-a release: only `play release` does, and it refuses to run with uncommitted changes.
+Work goes straight onto `main`. The user has asked for frequent commits, and leaves them to you:
+
+- **Commit without asking,** whenever a distinct piece of work is done and meets the definition of
+  done. Keep unrelated changes in separate commits, rather than saving them up for one large one.
+- **Releases are the user's decision.** Bump the version, write release materials or run
+  `play release` only when asked for a release.
+- **Push or tag only when asked.**
+
+Commits never make a release: only `play release` does, and it refuses to run with uncommitted
+changes.
 
 ## Traps
 
