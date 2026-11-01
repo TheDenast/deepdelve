@@ -18,6 +18,13 @@ cargo run --release -- --seed 12345
 `nix develop --command cargo run --release` does both at once. A binary built inside the
 shell also runs on its own afterwards, as `./target/release/deepdelve`.
 
+To choose between the working tree and any past release, use the runner. Each release has its
+changelog, screenshots and benchmark in [releases/](releases/).
+
+```sh
+nix run .#play
+```
+
 | Input | Action |
 | --- | --- |
 | Mouse | Look |
@@ -49,3 +56,4 @@ cargo test --release                                  # unit tests
 
 - [docs/DESIGN.md](docs/DESIGN.md): game design decisions and why they were made.
 - [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md): how the engine works, and measurements.
+- [docs/RELEASES.md](docs/RELEASES.md): running old versions and making new releases.

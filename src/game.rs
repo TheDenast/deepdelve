@@ -260,6 +260,7 @@ impl Game {
         let s = &self.streamer.stats;
         let tier = self.streamer.generator().tier_near(self.pos.y);
         let lines = [
+            format!("DEEPDELVE {}", crate::version()),
             format!(
                 "FPS {fps:.0}   GPU CULL {:.1} OPAQUE {:.1} WATER {:.1} POST {:.1} MS",
                 frame.gpu_ms[0], frame.gpu_ms[1], frame.gpu_ms[2], frame.gpu_ms[3]

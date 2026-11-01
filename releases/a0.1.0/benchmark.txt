@@ -1,0 +1,13 @@
+$ deepdelve --headless --seed 777 --size 2560x1440 --bench 20 --bench-speed 120
+[2026-11-01T12:51:23Z INFO  deepdelve::render] adapter: AMD Radeon 780M Graphics (RADV PHOENIX) (Vulkan, Mesa 26.1.8)
+deepdelve a0.1.0-dev
+seed 777  spawn [-1421.5, 240.80101013183594, -2067.5]
+world ready in 2.65s: 38744 chunks, 8435 meshes, 7.75M quads (62 MB), avg 943 us/chunk
+  worst frame was number 619
+bench: 2575 frames in 20s at 120 blocks/s, flew to [-714, 168, -4352]
+  frame ms: mean 7.76  p50 7.14  p95 12.40  p99 15.22  max 21.92
+  gpu ms: cull 0.66  opaque 2.37  water 0.45  composite 0.42
+  drawn after occlusion: 0.94M quads in 4689 draws, of 0.97M quads in frustum
+  update ms (streaming, uploads): mean 0.68  p99 7.02  max 12.03
+  worst single step us: plan 5188  accept 1944  select 10769
+  peak queue while flying: 867

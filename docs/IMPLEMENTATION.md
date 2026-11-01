@@ -3,10 +3,10 @@
 ## Stack
 
 Rust with [wgpu](https://wgpu.rs) 30 on Vulkan, winit for windows and input, glam for math.
-There is no game engine. Dependencies come from `flake.nix`, whose nixpkgs is **pinned to
-the running NixOS revision on purpose**: the Vulkan loader in the shell loads the system's
-Mesa driver, and both need the same glibc. If Vulkan fails to initialize after a system
-upgrade, re-pin it with the command in the comment at the top of `flake.nix`.
+There is no game engine. Dependencies come from `flake.nix`. Its shell and packages use the
+Mesa from the flake's own nixpkgs rather than the system's, so a NixOS upgrade can't break them;
+[RELEASES.md](RELEASES.md) explains why and what it costs. A binary run outside the shell, as
+`./target/release/deepdelve`, still uses the system's driver.
 
 ## Layout
 
@@ -25,6 +25,8 @@ upgrade, re-pin it with the command in the comment at the top of `flake.nix`.
 | `src/render/textures.rs`, `font.rs`, `pool.rs` | Texture array, HUD font, GPU memory allocator |
 | `src/bin/gen_textures.rs` | Derives `crystal_32.png` and `grass_side_32.png` |
 | `shaders/` | WGSL shaders, compiled at run time by wgpu |
+| `tools/play/` | Go tool for running old versions and making releases |
+| `releases/` | Each release's changelog, screenshots and benchmark |
 
 ## Chunks and level of detail
 

@@ -137,6 +137,7 @@ pub fn run(opts: crate::Options) {
     if opts.tier != 0 {
         game.pos = DVec3::from_array(game.streamer.generator().find_spawn(opts.tier));
     }
+    println!("deepdelve {}", crate::version());
     println!("seed {}  spawn {:?}", opts.seed, game.pos.to_array());
     game.occlusion = opts.occlusion;
     let mut o = Offscreen {

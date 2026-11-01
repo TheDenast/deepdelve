@@ -27,9 +27,22 @@ pub struct Options {
     pub exit_after: f32,
 }
 
+/// The release name, such as "a0.1.0". Only packaged builds (see flake.nix) claim to be
+/// that release; anything built with cargo directly is marked as a development build.
+pub fn version() -> String {
+    let dev = if option_env!("DEEPDELVE_PACKAGED").is_some() {
+        ""
+    } else {
+        "-dev"
+    };
+    format!("a{}{dev}", env!("CARGO_PKG_VERSION"))
+}
+
 fn print_help() {
     println!(
         "deepdelve [options]\n\n\
+         General:\n  \
+           --version           print the version\n\n\
          Playing:\n  \
            --seed N            world seed (default: random)\n  \
            --render-height N   internal render height in pixels, upscaled to the window (default 1440)\n  \
@@ -84,6 +97,10 @@ fn parse_args() -> Options {
         match a.as_str() {
             "--help" | "-h" => {
                 print_help();
+                std::process::exit(0);
+            }
+            "--version" | "-V" => {
+                println!("deepdelve {}", version());
                 std::process::exit(0);
             }
             "--seed" => o.seed = num(need(args.next(), &a), &a) as u64,
