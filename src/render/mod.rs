@@ -20,7 +20,6 @@ const HDR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const BLOOM_LEVELS: usize = 5;
 pub const NEAR_PLANE: f32 = 0.08;
-pub const FOG_DISTANCE: f32 = 2150.0;
 const MACRO_TILE: f64 = 2048.0;
 
 #[repr(C)]
@@ -44,10 +43,10 @@ struct DrawData {
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct ChunkInfoGpu {
-    water_y: f32,
+    liquid_y: f32,
     scale: f32,
     tint: u32,
-    pad: u32,
+    crystal: u32,
     light: [u32; 32],
 }
 
@@ -93,8 +92,10 @@ pub struct FrameParams<'a> {
     pub fov_y: f32,
     pub time: f32,
     pub fog_color: Vec3,
+    pub fog_distance: f32,
     pub ambient: Vec3,
     pub underwater: bool,
+    pub in_lava: bool,
     pub outline: Option<[i64; 3]>,
     pub occlusion: bool,
     pub hud: &'a [HudRect],
@@ -130,10 +131,10 @@ impl ChunkSink for ChunkGpu {
 
     fn write_chunk_info(&mut self, slot: u32, look: &ChunkLook, light: &[u8; 125], lod: u8) {
         let mut info = ChunkInfoGpu {
-            water_y: look.water_y,
+            liquid_y: look.liquid_y,
             scale: (1u32 << lod) as f32,
             tint: look.tint[0] as u32 | (look.tint[1] as u32) << 8 | (look.tint[2] as u32) << 16,
-            pad: 0,
+            crystal: u32::from_le_bytes(look.crystal),
             light: [0; 32],
         };
         for (i, &b) in light.iter().enumerate() {
@@ -1283,10 +1284,13 @@ impl Renderer {
         let view_proj = proj * p.view;
 
         let mut fog = p.fog_color;
-        let mut fog_distance = FOG_DISTANCE;
+        let mut fog_distance = p.fog_distance;
         if p.underwater {
             fog = Vec3::new(0.016, 0.085, 0.115);
             fog_distance = 150.0;
+        } else if p.in_lava {
+            fog = Vec3::new(1.4, 0.34, 0.03);
+            fog_distance = 7.0;
         }
         let wrap = |v: f64| v.rem_euclid(MACRO_TILE) as f32;
         let globals = Globals {

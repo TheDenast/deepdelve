@@ -13,7 +13,7 @@ use crate::world::{PADDED, Voxels, pidx};
 use bytemuck::{Pod, Zeroable};
 
 pub const CS: usize = 32;
-/// Range index holding water quads. 0..=5 are opaque quads per direction.
+/// Range index holding liquid quads. 0..=5 are opaque quads per direction.
 pub const WATER_RANGE: usize = 6;
 
 /// Bits covering a chunk's own voxels in a padded column (index 0 is the border).
@@ -118,7 +118,7 @@ pub fn build_mesh(v: &Voxels, lod: u8, sc: &mut MeshScratch) -> Mesh {
                 let b = v[i];
                 i += 1;
                 s |= (is_opaque(b) as u64) << x;
-                w |= ((b == WATER) as u64) << x;
+                w |= (is_liquid(b) as u64) << x;
             }
             sc.solid[z * PADDED + y] = s;
             sc.water[z * PADDED + y] = w;
@@ -207,7 +207,6 @@ fn mesh_dir(
     bmax: &mut [u8; 3],
 ) {
     let (an, au, av, pos) = AXES[dir as usize];
-    let water_key = 0x8000 | ((face_layer(WATER, dir) as u16) << 8) | 0xFF;
     let mut used = 0u32;
     {
         let solid = &*sc.solid;
@@ -239,10 +238,10 @@ fn mesh_dir(
                     let x = bits.trailing_zeros() as usize;
                     bits &= bits - 1;
                     let c = [x, y, z];
+                    let block = v[pidx(x, y, z)];
                     let key = if water_pass {
-                        water_key
+                        0x8000 | ((face_layer(block, dir) as u16) << 8) | 0xFF
                     } else {
-                        let block = v[pidx(x, y, z)];
                         let mut n = c;
                         n[an] = if pos { n[an] + 1 } else { n[an] - 1 };
                         let ao = face_ao(solid, n, au, av);

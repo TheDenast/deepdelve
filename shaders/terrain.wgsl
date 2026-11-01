@@ -19,10 +19,11 @@ struct Draw {
 }
 
 struct ChunkInfo {
-    water_y: f32,
+    liquid_y: f32,
     scale: f32,
     tint: u32,
-    pad: u32,
+    // rgb, then brightness.
+    crystal: u32,
     light: array<u32, 32>,
 }
 
@@ -43,6 +44,16 @@ struct Quad {
 @group(1) @binding(0) var scene_depth: texture_depth_2d;
 
 const MACRO_TILE: f32 = 2048.0;
+
+// Texture layers this shader treats specially. A test in block.rs keeps these in step.
+const L_GRASS: u32 = 3u;
+const L_GRASS_SIDE: u32 = 4u;
+const L_LEAVES: u32 = 9u;
+const L_LAVA: u32 = 14u;
+const L_DARK_GRASS: u32 = 15u;
+const L_DARK_GRASS_SIDE: u32 = 16u;
+const L_PINE_NEEDLES: u32 = 23u;
+const L_EMBER: u32 = 25u;
 
 var<private> NORMALS: array<vec3<f32>, 6> = array<vec3<f32>, 6>(
     vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(-1.0, 0.0, 0.0),
@@ -69,8 +80,9 @@ struct VOut {
     @location(2) lit: f32,
     @location(3) @interpolate(flat) layer: u32,
     @location(4) @interpolate(flat) tint: vec3<f32>,
-    @location(5) @interpolate(flat) water_y: f32,
+    @location(5) @interpolate(flat) liquid_y: f32,
     @location(6) @interpolate(flat) flags: u32,
+    @location(7) @interpolate(flat) crystal: vec4<f32>,
 }
 
 fn light_byte(info_slot: u32, i: u32) -> f32 {
@@ -93,6 +105,10 @@ fn sample_light(slot: u32, p: vec3<f32>) -> f32 {
 fn unpack_tint(t: u32) -> vec3<f32> {
     let c = vec3<f32>(f32(t & 255u), f32((t >> 8u) & 255u), f32((t >> 16u) & 255u)) / 255.0;
     return c * c;
+}
+
+fn unpack_crystal(t: u32) -> vec4<f32> {
+    return vec4<f32>(unpack_tint(t), f32(t >> 24u) / 255.0 * 8.0);
 }
 
 struct Decoded {
@@ -165,8 +181,9 @@ fn vs_opaque(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -
     out.rel = rel;
     out.layer = d.layer;
     out.tint = unpack_tint(info.tint);
-    out.water_y = info.water_y;
+    out.liquid_y = info.liquid_y;
     out.flags = d.dir | (d.emissive << 3u);
+    out.crystal = unpack_crystal(info.crystal);
 
     if d.emissive == 1u {
         out.lit = 1.0;
@@ -193,10 +210,15 @@ fn fs_opaque(in: VOut) -> @location(0) vec4<f32> {
     base *= 0.74 + 0.52 * m.r;
     base = mix(base, base * vec3<f32>(1.06, 0.98, 0.86), m.g);
 
-    // Grass and leaves vary between stands, so a forest isn't one flat green.
-    if in.layer == 3u || in.layer == 4u || in.layer == 9u {
+    // Plants vary between stands, so a forest isn't one flat green. The dark forest stays
+    // closer to its own colour, since warm patches there would break the mood.
+    let lush = in.layer == L_GRASS || in.layer == L_GRASS_SIDE || in.layer == L_LEAVES;
+    let dark = in.layer == L_DARK_GRASS || in.layer == L_DARK_GRASS_SIDE || in.layer == L_PINE_NEEDLES;
+    if lush || dark {
         let stand = textureSample(macro_tex, macro_sampler, wrapped.xz * 21.0 + wrapped.y * 3.0).rg;
-        base = mix(base * vec3<f32>(1.14, 1.02, 0.62), base * vec3<f32>(0.64, 0.98, 0.84), smoothstep(0.32, 0.68, stand.r));
+        let warm = select(vec3<f32>(1.0, 1.02, 0.86), vec3<f32>(1.14, 1.02, 0.62), lush);
+        let cool = select(vec3<f32>(0.78, 1.0, 1.08), vec3<f32>(0.64, 0.98, 0.84), lush);
+        base = mix(base * warm, base * cool, smoothstep(0.32, 0.68, stand.r));
         base *= 0.88 + 0.28 * stand.g;
     }
 
@@ -204,11 +226,14 @@ fn fs_opaque(in: VOut) -> @location(0) vec4<f32> {
     var color: vec3<f32>;
     if emissive == 1u {
         let pulse = 0.92 + 0.08 * sin(globals.cam_wrapped.w * 0.9 + m.r * 25.0);
-        // Crystal takes its colour from the tier's mood, kept saturated so it reads as
-        // coloured light rather than clipping to white.
-        let hue = in.tint * in.tint * in.tint;
-        let bright = dot(base, vec3<f32>(0.3, 0.6, 0.1));
-        color = hue * bright * 4.2 * pulse;
+        if in.layer == L_EMBER {
+            // The texture already holds the colour of its cracks.
+            color = base * 2.4 * pulse;
+        } else {
+            // Crystal's colour belongs to the layer, and its texture is only brightness.
+            let bright = dot(base, vec3<f32>(0.3, 0.6, 0.1));
+            color = in.crystal.rgb * bright * in.crystal.a * pulse;
+        }
         return vec4<f32>(apply_fog(color, dist, 0.45), 1.0);
     }
 
@@ -217,8 +242,9 @@ fn fs_opaque(in: VOut) -> @location(0) vec4<f32> {
 
     // Light dies quickly below the water line.
     let world_y = in.rel.y + globals.cam_info.x;
-    let depth = in.water_y - world_y;
-    if depth > 0.0 {
+    let depth = in.liquid_y - world_y;
+    // Only for what could be under a lake. Far below, it would just blacken the bedrock.
+    if depth > 0.0 && depth < 400.0 {
         let fade = exp(-depth * 0.022);
         color = color * mix(vec3<f32>(0.20, 0.42, 0.50), vec3<f32>(0.70, 0.92, 1.0), fade);
     }
@@ -243,7 +269,7 @@ fn vs_water(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) ->
     // Coarse voxels can't land on the real water height, so top faces are
     // snapped to it. All LOD levels of a sea then share one flat plane.
     if d.dir == 2u {
-        rel.y = info.water_y - globals.cam_info.x;
+        rel.y = info.liquid_y - globals.cam_info.x;
     }
     var out: WaterOut;
     out.clip = globals.view_proj * vec4<f32>(rel, 1.0);
@@ -261,9 +287,26 @@ fn fs_water(in: WaterOut) -> @location(0) vec4<f32> {
     let dist = length(in.rel);
     let world = in.rel + globals.cam_wrapped.xyz;
 
-    // Two scrolling layers of the water texture give the moving surface.
+    if in.layer == L_LAVA {
+        // Two slow layers of crust and channels, drifting across each other. Both scales
+        // repeat a whole number of times per chunk, so the pattern crosses chunks cleanly.
+        // Warping by large-scale noise bends the repeating pattern out of its grid.
+        let warp = textureSample(macro_tex, macro_sampler, world.xz / 83.0).rg - 0.5;
+        let warp2 = textureSample(macro_tex, macro_sampler, world.zx / 311.0).rg - 0.5;
+        let bend = warp * 1.5 + warp2 * 3.5;
+        let a = textureSample(tex, tex_sampler, in.uv * 0.0625 + bend + vec2<f32>(t * 0.008, t * 0.004), in.layer).r;
+        let b = textureSample(tex, tex_sampler, in.uv.yx * 0.09375 - bend + vec2<f32>(-t * 0.006, t * 0.009), in.layer).r;
+        let swell = textureSample(macro_tex, macro_sampler, world.xz / 211.0 + vec2<f32>(t * 0.002, -t * 0.0015)).r;
+        let heat = a * 0.72 + b * 0.42 + swell * 0.34 - 0.2;
+        var glow = mix(vec3<f32>(0.16, 0.018, 0.005), vec3<f32>(1.35, 0.26, 0.025), smoothstep(0.02, 0.46, heat));
+        glow = mix(glow, vec3<f32>(4.4, 1.9, 0.32), smoothstep(0.56, 0.98, heat));
+        return vec4<f32>(apply_fog(glow, dist, 0.55), 1.0);
+    }
+
+    // Two scrolling layers of the water texture give the moving surface. Both scales repeat
+    // a whole number of times per chunk, so the pattern crosses chunks cleanly.
     let uv_a = in.uv * 0.25 + vec2<f32>(t * 0.031, t * 0.017);
-    let uv_b = in.uv.yx * 0.11 + vec2<f32>(-t * 0.013, t * 0.023);
+    let uv_b = in.uv.yx * 0.125 + vec2<f32>(-t * 0.013, t * 0.023);
     let tex_a = textureSample(tex, tex_sampler, uv_a, in.layer).rgb;
     let tex_b = textureSample(tex, tex_sampler, uv_b, in.layer).rgb;
     var water = (tex_a + tex_b) * 0.5;
@@ -283,14 +326,17 @@ fn fs_water(in: WaterOut) -> @location(0) vec4<f32> {
 
     // Glancing angles mirror the glowing ceiling far above.
     let view_dir = normalize(in.rel);
-    let ripple = textureSample(macro_tex, macro_sampler, world.xz / 19.0 + vec2<f32>(t * 0.011, -t * 0.008)).r - 0.5;
+    // Sizes with no common factor, so that the two don't line up into a visible grid.
+    let ripple_a = textureSample(macro_tex, macro_sampler, world.xz / 61.0 + vec2<f32>(t * 0.007, -t * 0.005)).r;
+    let ripple_b = textureSample(macro_tex, macro_sampler, world.zx / 97.0 + vec2<f32>(-t * 0.004, t * 0.006)).g;
+    let ripple = (ripple_a + ripple_b) * 0.5 - 0.5;
     let ndv = clamp(abs(view_dir.y) + ripple * 0.09, 0.0, 1.0);
     let fresnel = 0.03 + 0.97 * pow(1.0 - ndv, 5.0);
     let sky = globals.ambient.rgb * (0.30 + lit * 0.8) * in.tint;
     color = mix(color, sky, fresnel);
 
     // A faint sparkle where ripples catch the light.
-    let sparkle = pow(max(ripple * 2.0, 0.0), 8.0) * lit * 0.45;
+    let sparkle = pow(max(ripple * 2.0, 0.0), 8.0) * lit * 0.16;
     color += in.tint * sparkle;
 
     let alpha = clamp(0.45 + 0.5 * absorb + fresnel * 0.6, 0.0, 1.0);

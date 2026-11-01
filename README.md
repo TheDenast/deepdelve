@@ -1,9 +1,10 @@
 # Deepdelve
 
-A tech demo of an underground voxel world in Rust and wgpu. There is no surface: only
-rock, and inside it stacked caverns a kilometre or two across, holding forests, lakes and
-seas under ceilings of glowing crystal. Chunks are true 3D and generate in a sphere around
-you, with terrain visible about 4 km away.
+A tech demo of an underground voxel world in Rust and wgpu. There is no surface: only three
+stacked layers of caverns a kilometre or two across, sealed between bedrock with void beyond.
+You start in the Overworld, with green forests and lakes under a sky of blue crystal. Below
+it lie the Dark Forest and the lava-lit Underworld. Chunks are true 3D and generate in a
+sphere around you, with terrain visible about 4 km away.
 
 ## Running
 
@@ -39,16 +40,18 @@ nix run .#play
 | F2 | Toggle occlusion culling |
 | F12 | Save a screenshot to `captures/` |
 
-Useful options: `--render-height N` sets the internal resolution (default 1440, upscaled
-to the window), `--no-vsync` uncaps the frame rate, `--fullscreen`. See `--help` for all.
+Useful options: `--tier N` starts in another layer (0 top, 1 middle, 2 bottom),
+`--render-height N` sets the internal resolution (default 1440, upscaled to the window),
+`--no-vsync` uncaps the frame rate, `--fullscreen`. See `--help` for all.
 
 ## Testing without a window
 
 ```sh
 cargo test --release                                  # unit tests
 ./target/release/deepdelve --headless                 # end-to-end: break, reload, reset
-./target/release/deepdelve --headless --tour out/     # screenshots of several caverns
+./target/release/deepdelve --headless --tour out/     # screenshots of every layer
 ./target/release/deepdelve --headless --bench 20 --bench-speed 600 --size 2560x1440
+./target/release/deepdelve --headless --tier 2 --bench 20   # the same, in a lower layer
 ./target/release/deepdelve --headless --shot view.png@172,300,875,0,-0.15   # x,y,z,yaw,pitch
 ```
 
@@ -57,3 +60,5 @@ cargo test --release                                  # unit tests
 - [docs/DESIGN.md](docs/DESIGN.md): game design decisions and why they were made.
 - [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md): how the engine works, and measurements.
 - [docs/RELEASES.md](docs/RELEASES.md): running old versions and making new releases.
+- [docs/STATUS.md](docs/STATUS.md): where the work stands, and known issues.
+- [CLAUDE.md](CLAUDE.md): how to work on this repo, for AI agents and humans alike.

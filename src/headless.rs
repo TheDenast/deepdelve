@@ -3,7 +3,8 @@
 
 use crate::game::{Game, Input};
 use crate::render::{MAX_SLOTS, POOL_QUADS, Renderer};
-use crate::world::block::is_opaque;
+use crate::world::block::{BEDROCK, is_opaque};
+use crate::world::generator::{WORLD_BOTTOM, WORLD_TOP};
 use glam::{DVec3, Vec3};
 
 #[derive(Debug, Clone)]
@@ -294,47 +295,71 @@ fn bench(o: &mut Offscreen, seconds: f32, speed: f32) {
     println!("  peak queue while flying: {peak_queue}");
 }
 
-/// Viewpoints across several caverns and depths, so a change to the terrain or
-/// the renderer can be judged at a glance.
+/// Viewpoints across every layer, so a change to the terrain or the renderer can be
+/// judged at a glance.
 fn tour(o: &mut Offscreen, dir: &str) {
     let g = o.game.streamer.generator().clone();
-    let start_tier = g.tier_near(o.game.pos.y).index;
-    let tiers = [start_tier, start_tier - 1, start_tier + 1, start_tier - 2];
-    for (n, tier_index) in tiers.into_iter().enumerate() {
-        let t = g
-            .tiers()
-            .iter()
-            .find(|t| t.index == tier_index)
-            .unwrap()
-            .clone();
-        let mut spot = g.find_spawn(tier_index);
-        let f = g.field(&t, spot[0], spot[2]);
+    let tiers = g.tiers().to_vec();
+    for t in &tiers {
+        let n = t.index;
+        let name = t.theme.name.to_lowercase().replace(' ', "_");
+        let mut spot = g.find_spawn(n);
+        let f = g.field(t, spot[0], spot[2]);
         // Wide shot from the upper part of the cavern, looking along it.
         spot[1] = (f.floor + (f.ceil - f.floor) * 0.62) as f64;
         o.game.pos = DVec3::from_array(spot);
         o.game.yaw = 0.7 * n as f32;
         o.game.pitch = -0.22;
         o.settle(60.0);
-        o.capture(&format!("{dir}/tier{tier_index:+}_wide.png"));
+        o.capture(&format!("{dir}/{n}_{name}_wide.png"));
         // Close to the ground.
         o.game.pos.y = (f.floor + 26.0) as f64;
         o.game.pitch = 0.06;
         o.settle(60.0);
-        o.capture(&format!("{dir}/tier{tier_index:+}_ground.png"));
-        // Across the water.
-        o.game.pos = DVec3::from_array(g.find_shore(tier_index));
+        o.capture(&format!("{dir}/{n}_{name}_ground.png"));
+        // Across the water or lava.
+        o.game.pos = DVec3::from_array(g.find_shore(n));
         o.game.pitch = -0.1;
         o.settle(60.0);
-        o.capture(&format!("{dir}/tier{tier_index:+}_shore.png"));
-        if let Some(c) = g.find_chasm(tier_index) {
+        o.capture(&format!("{dir}/{n}_{name}_shore.png"));
+        // At a mountain, from whichever side has open air around it.
+        let view = g.find_mountain(n).and_then(|m| {
+            (0..16).find_map(|i| {
+                let a = i as f32 * std::f32::consts::TAU / 16.0;
+                let (x, z) = (m[0] - a.sin() as f64 * 330.0, m[2] + a.cos() as f64 * 330.0);
+                let f = g.field(t, x, z);
+                let y = f.floor as f64 + (m[1] - f.floor as f64).max(40.0) * 0.75;
+                (f.open > 0.9 && (y as f32) < f.ceil - 30.0).then_some((x, y, z, a))
+            })
+        });
+        if let Some((x, y, z, yaw)) = view {
+            o.game.pos = DVec3::new(x, y, z);
+            o.game.yaw = yaw;
+            o.game.pitch = -0.04;
+            o.settle(60.0);
+            o.capture(&format!("{dir}/{n}_{name}_mountain.png"));
+        }
+        if n + 1 < tiers.len() as i32
+            && let Some(c) = g.find_chasm(n)
+        {
             // Looking down the shaft from just above its rim.
             o.game.pos = DVec3::new(c[0] - 150.0, c[1] + 60.0, c[2]);
             o.game.yaw = std::f32::consts::FRAC_PI_2;
             o.game.pitch = -0.55;
             o.settle(60.0);
-            o.capture(&format!("{dir}/tier{tier_index:+}_chasm.png"));
+            o.capture(&format!("{dir}/{n}_{name}_chasm.png"));
         }
     }
+    // Both ends of the world, seen from the void.
+    let (x, z) = (o.game.pos.x, o.game.pos.z);
+    o.game.pos = DVec3::new(x, WORLD_TOP as f64 + 90.0, z);
+    o.game.pitch = -0.5;
+    o.settle(60.0);
+    o.capture(&format!("{dir}/void_above.png"));
+    o.game.pos = DVec3::new(x, WORLD_BOTTOM as f64 - 90.0, z);
+    o.game.pitch = 0.5;
+    o.settle(60.0);
+    o.capture(&format!("{dir}/void_below.png"));
 }
 
 /// Exercises the whole break path against generated terrain and checks it.
@@ -344,7 +369,7 @@ fn break_test(o: &mut Offscreen) {
         let mut y = o.game.pos.y.floor() as i64;
         let x = o.game.pos.x.floor() as i64;
         let z = o.game.pos.z.floor() as i64;
-        while y > -40000 && !g.block_at(x, y, z).is_some_and(is_opaque) {
+        while y > WORLD_BOTTOM && !g.block_at(x, y, z).is_some_and(is_opaque) {
             y -= 1;
         }
         (
@@ -388,6 +413,20 @@ fn break_test(o: &mut Offscreen) {
         "edit must survive a reload"
     );
     println!("edit survived unloading: ok");
+
+    // Bedrock is the one thing that can't be broken.
+    o.game.pos = DVec3::new(pos.x, WORLD_TOP as f64 + 6.5, pos.z);
+    o.settle(60.0);
+    let cap = [target[0], WORLD_TOP - 1, target[2]];
+    o.step(0.016, &Input::default());
+    assert_eq!(o.game.raycast(), Some(cap), "ray must hit the bedrock");
+    o.step(0.016, &input);
+    assert_eq!(
+        o.game.streamer.block_at(cap[0], cap[1], cap[2]),
+        Some(BEDROCK),
+        "bedrock must not break"
+    );
+    println!("bedrock held: ok");
 
     // R: everything from the old world has to go, edits included.
     let old_seed = o.game.seed;

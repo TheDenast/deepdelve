@@ -1,33 +1,10 @@
 //! Block texture array and the tiling macro-variation noise.
 
-use crate::world::block::TEXTURE_NAMES;
+use crate::world::block::TEXTURES;
 use wgpu::util::DeviceExt;
 
 const SIZE: u32 = 32;
 const MIPS: u32 = 6;
-
-macro_rules! texture_bytes {
-    ($($name:literal),* $(,)?) => {
-        &[$(include_bytes!(concat!("../../textures/", $name, "_32.png"))),*]
-    };
-}
-
-/// Same order as `TEXTURE_NAMES`, which `tests::names_match` checks.
-static TEXTURE_FILES: &[&[u8]] = texture_bytes![
-    "stone",
-    "cobblestone",
-    "dirt",
-    "grass",
-    "grass_side",
-    "sand",
-    "water",
-    "log_side",
-    "log_top",
-    "leaves",
-    "coal_ore",
-    "iron_ore",
-    "crystal",
-];
 
 fn to_linear(v: u8) -> f32 {
     let c = v as f32 / 255.0;
@@ -142,11 +119,10 @@ pub fn create(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
 ) -> (wgpu::TextureView, wgpu::TextureView) {
-    assert_eq!(TEXTURE_FILES.len(), TEXTURE_NAMES.len());
-    let layers = TEXTURE_FILES.len() as u32;
+    let layers = TEXTURES.len() as u32;
     // wgpu expects layer 0 mips first with LayerMajor order.
     let mut mips_per_layer = Vec::new();
-    for (bytes, name) in TEXTURE_FILES.iter().zip(TEXTURE_NAMES) {
+    for (name, bytes) in TEXTURES {
         let img = image::load_from_memory(bytes)
             .unwrap_or_else(|e| panic!("texture {name}: {e}"))
             .to_rgba8();

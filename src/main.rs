@@ -55,7 +55,7 @@ fn print_help() {
            --tour DIR          capture a tour of generated viewpoints into DIR\n  \
            --bench SECONDS     fly through caverns and report frame times\n  \
            --bench-speed N     flight speed in blocks per second (default 120)\n  \
-           --tier N            start in this cavern tier (default 0)\n  \
+           --tier N            start in this layer: 0 top, 1 middle, 2 bottom (default 0)\n  \
            --no-occlusion      turn occlusion culling off, for comparisons\n  \
            --exit-after SECS   windowed mode: quit after this long and print a summary\n"
     );

@@ -8,13 +8,20 @@ Mesa from the flake's own nixpkgs rather than the system's, so a NixOS upgrade c
 [RELEASES.md](RELEASES.md) explains why and what it costs. A binary run outside the shell, as
 `./target/release/deepdelve`, still uses the system's driver.
 
+**What wgpu does and doesn't do.** wgpu is a layer over Vulkan, not a renderer. It sets up the GPU,
+allocates memory, compiles shaders, keeps GPU work in order and catches invalid use. It has no idea
+what a camera, chunk, light or texture placement is, and it doesn't remember a scene. Everything
+that decides what you see is ours: generating triangles, the camera math, culling, lighting, fog
+and post-processing. The graphics card itself does the raw work of filling triangles and reading
+textures, as directed by our shaders and draw commands.
+
 ## Layout
 
 | Path | Purpose |
 | --- | --- |
-| `src/world/generator.rs` | Terrain: tiers, caverns, trees, chasms, the light field |
+| `src/world/generator.rs` | Terrain: layer themes, caverns, trees, chasms, bedrock, the light field |
 | `src/world/noise.rs` | Seeded Perlin noise and hashes |
-| `src/world/block.rs` | Block ids, texture layers |
+| `src/world/block.rs` | Block ids, and the one list of texture layers |
 | `src/world/mod.rs` | `ChunkKey`, padded voxel layout |
 | `src/mesher.rs` | Greedy mesher with ambient occlusion |
 | `src/stream.rs` | Octree of wanted chunks, worker threads, draw selection, edits |
@@ -23,7 +30,7 @@ Mesa from the flake's own nixpkgs rather than the system's, so a NixOS upgrade c
 | `src/headless.rs` | Off-screen runs: screenshots, benchmark, end-to-end test |
 | `src/render/mod.rs` | All GPU work: buffers, culling, passes |
 | `src/render/textures.rs`, `font.rs`, `pool.rs` | Texture array, HUD font, GPU memory allocator |
-| `src/bin/gen_textures.rs` | Derives `crystal_32.png` and `grass_side_32.png` |
+| `src/bin/gen_textures.rs` | Paints every texture in `textures/` from code |
 | `shaders/` | WGSL shaders, compiled at run time by wgpu |
 | `tools/play/` | Go tool for running old versions and making releases |
 | `releases/` | Each release's changelog, screenshots and benchmark |
@@ -55,11 +62,19 @@ shader, so a sea stays one flat plane across every level.
 
 ## Generation
 
+The `THEMES` table in `generator.rs` defines each layer, from its blocks and trees to its light
+and fog, so changing a layer's character is mostly a matter of changing numbers there. Chunks past
+the bedrock are all air, so the void costs almost nothing.
+
 Two costs are avoided. Slow 2D fields are computed on a coarse lattice and interpolated.
 3D noise is computed lazily on another lattice, and only near surfaces. Chunks outside a
 tier's height band skip all of it. Trees are found by hashing grid cells, so a chunk knows
 about trees rooted in its neighbours without those being generated. A tree's position and
 shape depend only on the seed, so both chunks agree on it.
+
+**Textures** come from `cargo run --release --bin gen_textures`, and the results are committed.
+Adding one means painting it there and adding one line to `texture_layers!` in `block.rs`. If the
+shader needs its number, a test keeps `terrain.wgsl` in step.
 
 Everything uses f64 for absolute horizontal positions and f32 only for offsets. The world
 works unchanged 20 million blocks from the origin, which was checked by test screenshot.
@@ -101,6 +116,10 @@ each chunk direction costs one multi-draw entry, with no state changes or per-ch
    the water really is at each pixel.
 5. Bloom chain, then composite with a filmic tonemap, upscaled to the window, HUD on top.
 
+**Lava** goes through the water path: it has the same top-face snapping and the same pass, but
+writes solid glowing colour. Its pattern is warped by large-scale noise, because a repeating
+texture otherwise shows up as a grid across a whole lake.
+
 **Light** is a 5x5x5 byte grid per chunk, sampled from the same fields as the terrain and
 interpolated per vertex, so it costs nothing per block and keeps quads mergeable. Being a
 smooth large-scale field, it needs no flood fill. Minecraft-style block light couldn't reach
@@ -108,7 +127,8 @@ across a cavern anyway.
 
 ## Measurements
 
-Radeon 780M integrated GPU, Ryzen 7 7840U, 14 worker threads, seed 777 unless noted.
+Radeon 780M integrated GPU, Ryzen 7 7840U, 14 worker threads, seed 777 unless noted. Results
+for each release are in `releases/`. These are from `a0.1.0`, before the three layers.
 
 | Measure | Result |
 | --- | --- |
@@ -136,7 +156,15 @@ quads drawn stay near 1M in most views, so views packed with geometry can cost m
 `cargo test --release` covers the mesher, allocator and octree. `deepdelve --headless` with no
 other options runs the full game path against generated terrain: it breaks a block through a
 raycast, checks the edit survives flying away and back, then checks the R reset. A headless
-`--tour` gives screenshots of many caverns for judging terrain and rendering changes.
+`--tour` gives screenshots of every layer and both ends of the world, for judging terrain and
+rendering changes. Current numbers per layer, with the same settings as the 2560x1440, 120
+blocks/s row above:
+
+| Layer | Frame mean | p99 | GPU terrain | Quads stored |
+| --- | --- | --- | --- | --- |
+| Overworld | 8.3 ms | 16.9 | 3.0 ms | 9M |
+| Dark Forest | 9.9 ms | 20.2 | 4.1 ms | 15M |
+| Underworld | 8.1 ms | 16.0 | 2.9 ms | 10M |
 
 A real window can be tested with no display of your own, inside weston:
 

@@ -2,7 +2,8 @@
 
 use crate::render::{ChunkGpu, FrameParams, HudRect, font};
 use crate::stream::{ChunkSink, Streamer};
-use crate::world::block::{AIR, WATER, is_opaque};
+use crate::world::block::{AIR, LAVA, WATER, is_breakable, is_opaque};
+use crate::world::generator::{WORLD_BOTTOM, WORLD_TOP};
 use crate::world::noise::{smoothstep, splitmix};
 use glam::{DVec3, Mat4, Vec2, Vec3, Vec4};
 
@@ -36,6 +37,7 @@ pub struct Game {
     break_timer: f32,
     fog: Vec3,
     ambient: Vec3,
+    fog_distance: f32,
     fog_primed: bool,
 }
 
@@ -58,6 +60,7 @@ impl Game {
             break_timer: 0.0,
             fog: Vec3::ZERO,
             ambient: Vec3::ZERO,
+            fog_distance: 2000.0,
             fog_primed: false,
         }
     }
@@ -142,6 +145,13 @@ impl Game {
 
     pub fn break_block(&mut self, t: [i64; 3], sink: &mut impl ChunkSink) {
         let start = std::time::Instant::now();
+        if !self
+            .streamer
+            .block_at(t[0], t[1], t[2])
+            .is_some_and(is_breakable)
+        {
+            return;
+        }
         if let Some(n) = self.streamer.set_block(t[0], t[1], t[2], AIR, sink) {
             self.blocks_broken += 1;
             self.last_remesh = Some((n, start.elapsed().as_secs_f32() * 1000.0));
@@ -193,17 +203,23 @@ impl Game {
         let g = self.streamer.generator();
         let t = g.tier_near(self.pos.y);
         let f = g.field(t, self.pos.x, self.pos.z);
-        let lin = |c: u8| {
-            let v = c as f32 / 255.0;
-            v * v
-        };
-        let tint = Vec3::new(lin(t.tint[0]), lin(t.tint[1]), lin(t.tint[2]));
+        let air = Vec3::from_array(t.theme.fog);
         let inside = smoothstep(0.0, 0.8, f.open)
             * smoothstep(f.floor - 30.0, f.floor + 5.0, self.pos.y as f32)
             * (1.0 - smoothstep(f.ceil - 5.0, f.ceil + 30.0, self.pos.y as f32));
         let glow = 0.5 + 0.5 * f.glow;
-        let fog_target = tint * (0.018 + 0.19 * inside * glow) * Vec3::new(0.86, 0.96, 1.08);
-        let amb_target = tint * (0.035 + 0.5 * inside * glow);
+        // Beyond the bedrock there's nothing to light the air.
+        let in_world = self.pos.y < WORLD_TOP as f64 && self.pos.y >= WORLD_BOTTOM as f64;
+        let (fog_target, amb_target, distance_target) = if in_world {
+            let brightness = 0.1 + 0.9 * inside * glow;
+            (
+                air * brightness,
+                air * 2.4 * brightness,
+                t.theme.fog_distance,
+            )
+        } else {
+            (Vec3::ZERO, Vec3::ZERO, 6000.0)
+        };
         let k = if self.fog_primed {
             1.0 - (-dt * 0.8).exp()
         } else {
@@ -211,20 +227,23 @@ impl Game {
         };
         self.fog = self.fog.lerp(fog_target, k);
         self.ambient = self.ambient.lerp(amb_target, k);
+        self.fog_distance += (distance_target - self.fog_distance) * k;
         self.fog_primed = true;
     }
 
     pub fn frame_params<'a>(&self, hud: &'a [HudRect]) -> FrameParams<'a> {
         let b = self.pos.floor().as_i64vec3();
-        let underwater = self.streamer.block_at(b.x, b.y, b.z) == Some(WATER);
+        let inside = self.streamer.block_at(b.x, b.y, b.z);
         FrameParams {
             cam_pos: self.pos,
             view: self.view_matrix(),
             fov_y: FOV_Y_DEG.to_radians(),
             time: self.time,
             fog_color: self.fog,
+            fog_distance: self.fog_distance,
             ambient: self.ambient,
-            underwater,
+            underwater: inside == Some(WATER),
+            in_lava: inside == Some(LAVA),
             outline: self.target,
             occlusion: self.occlusion,
             hud,
@@ -266,8 +285,13 @@ impl Game {
                 frame.gpu_ms[0], frame.gpu_ms[1], frame.gpu_ms[2], frame.gpu_ms[3]
             ),
             format!(
-                "POS {:.0} {:.0} {:.0}   TIER {}   WATER LEVEL {:.0}",
-                self.pos.x, self.pos.y, self.pos.z, tier.index, tier.water_y
+                "POS {:.0} {:.0} {:.0}   LAYER {} {}   LIQUID LEVEL {:.0}",
+                self.pos.x,
+                self.pos.y,
+                self.pos.z,
+                tier.index + 1,
+                tier.theme.name,
+                tier.liquid_y
             ),
             format!("SPEED {:.0}   SEED {}", self.speed, self.seed),
             format!(
