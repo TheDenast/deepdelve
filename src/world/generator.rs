@@ -57,6 +57,25 @@ struct Surface {
     canopy: u8,
 }
 
+/// How uneven a tier's ordinary floor is, away from its mountains.
+#[derive(Debug)]
+struct Ground {
+    /// Height of the rolling hills, in blocks.
+    hills: f32,
+    /// More octaves add smaller lumps on top of the hills.
+    hill_octaves: u32,
+    /// Size of the regions that are either plains or hills, in blocks.
+    plains_scale: f64,
+    /// Noise value where plains begin. Lower means more of them.
+    plains_from: f32,
+    /// How much of the hills and bumps survives on a plain. 1 means there are no plains.
+    plains_keep: f32,
+    /// Height between a plain's level shelves. Larger means wider shelves.
+    shelf: f32,
+    /// Strength of the small bumps everywhere except on mountains.
+    bumps: f32,
+}
+
 /// Noise-shaped peaks rising out of a tier's floor.
 #[derive(Debug)]
 struct Mountains {
@@ -117,6 +136,7 @@ pub struct Theme {
     pillars: f32,
     /// The least forest cover anywhere that trees can grow.
     forest_min: f32,
+    ground: Ground,
     mountains: Option<Mountains>,
     surface: Surface,
     trees: Option<Trees>,
@@ -144,6 +164,15 @@ static THEMES: [Theme; 3] = [
         ground_spikes: 0.03,
         pillars: 0.14,
         forest_min: 0.0,
+        ground: Ground {
+            hills: 40.0,
+            hill_octaves: 3,
+            plains_scale: 900.0,
+            plains_from: -0.16,
+            plains_keep: 0.12,
+            shelf: 32.0,
+            bumps: 0.6,
+        },
         mountains: None,
         surface: Surface {
             top: GRASS,
@@ -184,6 +213,15 @@ static THEMES: [Theme; 3] = [
         ground_spikes: 0.05,
         pillars: 0.2,
         forest_min: 0.9,
+        ground: Ground {
+            hills: 36.0,
+            hill_octaves: 3,
+            plains_scale: 700.0,
+            plains_from: -0.1,
+            plains_keep: 0.15,
+            shelf: 28.0,
+            bumps: 0.6,
+        },
         mountains: Some(Mountains {
             scale: 430.0,
             threshold: 0.1,
@@ -228,6 +266,15 @@ static THEMES: [Theme; 3] = [
         ground_spikes: 0.2,
         pillars: 0.3,
         forest_min: 0.0,
+        ground: Ground {
+            hills: 58.0,
+            hill_octaves: 4,
+            plains_scale: 900.0,
+            plains_from: 0.0,
+            plains_keep: 1.0,
+            shelf: 0.0,
+            bumps: 1.0,
+        },
         mountains: Some(Mountains {
             scale: 620.0,
             threshold: -0.02,
@@ -271,6 +318,8 @@ pub struct Field {
     pub forest: f32,
     /// 0 on the ordinary floor, rising to 1 on a mountain.
     pub mountain: f32,
+    /// How much of the floor's unevenness applies here: 1 in hills, low on plains.
+    pub rough: f32,
 }
 
 impl Field {
@@ -278,6 +327,7 @@ impl Field {
         Field {
             floor: mid,
             ceil: mid,
+            rough: 1.0,
             ..Default::default()
         }
     }
@@ -412,16 +462,35 @@ impl Generator {
         let var = 0.72 + 0.28 * n.n2(xo / 1100.0 + 7.0, zo / 1100.0 + 3.0);
         let th = t.theme;
         let h = open.powf(0.62) * th.hmax * var;
-        let hills = n.fbm2(xo / 300.0, zo / 300.0, 4) * 58.0 * open;
         let roof = n.fbm2(xo / 240.0 - 40.0, zo / 240.0 + 11.0, 3) * 46.0 * open;
         let glow_n = n.fbm2(xo / 520.0 + 300.0, zo / 520.0 - 200.0, 2);
         let forest_n = n.fbm2(xo / 640.0 - 123.0, zo / 640.0 + 321.0, 2);
-        let mut floor = mid - 0.2 * h + hills;
-        let ceil = mid + 0.8 * h + roof;
-        let mut mountain = 0.0;
-        if let Some(m) = &th.mountains {
+        let mountain = th.mountains.as_ref().map_or(0.0, |m| {
             let v = n.fbm2(xo / m.scale + 613.0, zo / m.scale - 271.0, 3);
-            let k = smoothstep(m.threshold, m.threshold + 0.26, v) * open;
+            smoothstep(m.threshold, m.threshold + 0.26, v) * open
+        });
+        let g = &th.ground;
+        // Plains give way to rough ground before a mountain starts to rise, so that its
+        // foot doesn't look pasted onto a table.
+        let off_mountain = 1.0 - smoothstep(0.0, 0.3, mountain);
+        let plains = if g.plains_keep < 1.0 {
+            let p = n.fbm2(xo / g.plains_scale - 77.0, zo / g.plains_scale + 145.0, 2);
+            smoothstep(g.plains_from, g.plains_from + 0.2, p) * off_mountain
+        } else {
+            0.0
+        };
+        let calm = 1.0 + (g.plains_keep - 1.0) * plains;
+        let hills = n.fbm2(xo / 300.0, zo / 300.0, g.hill_octaves) * g.hills * open * calm;
+        let mut floor = mid - 0.2 * h + hills;
+        if plains > 0.0 {
+            // The land's slow drift would leave a plain tilted, and striped with block
+            // edges. One shelf sits just above the liquid, so that shores stay dry.
+            let level = shelve(floor, t.liquid_y as f32 + 5.0, g.shelf);
+            floor += (level - floor) * plains;
+        }
+        let ceil = mid + 0.8 * h + roof;
+        if let Some(m) = &th.mountains {
+            let k = mountain;
             if k > 0.0 {
                 // Folding noise around zero draws sharp ridgelines along the peaks.
                 let fold = n.n2(xo / (m.scale * 0.21), zo / (m.scale * 0.21)).abs();
@@ -430,7 +499,6 @@ impl Generator {
                 floor += k * k * m.height * (0.58 + 0.36 * ridge + crag);
                 // Peaks can reach the ceiling, but shouldn't punch through it.
                 floor = floor.min(ceil - 24.0);
-                mountain = k;
             }
         }
         let forest = smoothstep(-0.10, 0.30, forest_n).max(th.forest_min);
@@ -441,6 +509,7 @@ impl Generator {
             glow: smoothstep(-0.12, 0.32, glow_n).max(th.glow_min),
             forest: forest * (1.0 - smoothstep(0.0, 0.1, mountain)),
             mountain,
+            rough: calm * (1.0 + (g.bumps - 1.0) * off_mountain),
         }
     }
 
@@ -600,15 +669,16 @@ impl Generator {
                 let glow = bilerp(a.glow, b.glow, c.glow, d.glow, fx, fz);
                 let forest = bilerp(a.forest, b.forest, c.forest, d.forest, fx, fz);
                 let mountain = bilerp(a.mountain, b.mountain, c.mountain, d.mountain, fx, fz);
+                let rough = bilerp(a.rough, b.rough, c.rough, d.rough, fx, fz);
                 // Slope of the floor, for deciding what can grow here.
                 let dfx = ((b.floor - a.floor) * (1.0 - fz) + (d.floor - c.floor) * fz) / gw as f32;
                 let dfz = ((c.floor - a.floor) * (1.0 - fx) + (d.floor - b.floor) * fx) / gw as f32;
                 let slope = (dfx * dfx + dfz * dfz).sqrt();
 
                 if detail {
-                    floor += self.noise.n2(x / 19.0, z / 19.0) * 3.4 * open;
+                    floor += self.noise.n2(x / 19.0, z / 19.0) * 3.4 * open * rough;
                     if lod == 0 {
-                        floor += self.noise.n2(x / 7.0 + 50.0, z / 7.0) * 1.3 * open;
+                        floor += self.noise.n2(x / 7.0 + 50.0, z / 7.0) * 1.3 * open * rough;
                     }
                     ceil -= self.spikes(t, x, z, glow) * open;
                     floor += self.stalagmite(t, x, z, forest) * open;
@@ -630,7 +700,7 @@ impl Generator {
                 }
 
                 let amp = WALL_NOISE_AMP + (CEIL_NOISE_AMP - WALL_NOISE_AMP) * open;
-                let floor_amp = WALL_NOISE_AMP + (FLOOR_NOISE_AMP - WALL_NOISE_AMP) * open;
+                let floor_amp = WALL_NOISE_AMP + (FLOOR_NOISE_AMP * rough - WALL_NOISE_AMP) * open;
                 let cy_mid = (floor + ceil) * 0.5;
                 let half = ((ceil - floor) * 0.5).max(1.0);
 
@@ -1219,6 +1289,13 @@ fn prepare_n3(lod: u8, buf: &mut Vec<f32>) {
     buf.resize(dim * dim * dim, f32::NAN);
 }
 
+/// Moves a height onto level shelves `step` apart, one of them at `base`, joined by ramps.
+fn shelve(y: f32, base: f32, step: f32) -> f32 {
+    let q = (y - base) / step;
+    let shelf = q.floor();
+    base + (shelf + smoothstep(0.25, 0.75, q - shelf)) * step
+}
+
 #[inline(always)]
 fn bilerp(a: f32, b: f32, c: f32, d: f32, fx: f32, fz: f32) -> f32 {
     let t = a + (b - a) * fx;
@@ -1714,6 +1791,77 @@ mod tests {
             checked += 1;
         }
         assert!(checked > 5, "only {checked} seeds had a chasm to check");
+    }
+
+    #[test]
+    fn the_upper_layers_have_level_ground() {
+        const PATCHES: u32 = 150;
+        for seed in [777, 42] {
+            let g = Generator::new(seed);
+            for t in &g.tiers()[..2] {
+                let (mut patches, mut level) = (0, 0);
+                'search: for pz in -40i64..40 {
+                    for px in -40i64..40 {
+                        let (x, z) = (px * 128, pz * 128);
+                        let f = g.field(t, x as f64 + 16.0, z as f64 + 16.0);
+                        let dry = f.floor as f64 > t.liquid_y + 6.0;
+                        if f.open < 0.95 || f.mountain > 0.02 || !dry {
+                            continue;
+                        }
+                        // The ground's height in each column of a chunk-sized patch, ignoring trees.
+                        let mut heights = std::collections::HashMap::new();
+                        let cy = (f.floor as i64).div_euclid(32) * 32;
+                        let mut top = [[i64::MIN; 32]; 32];
+                        for k in -2..=1 {
+                            let (c, key) = chunk(&g, x, cy + k * 32, z, 0);
+                            for (iz, row) in top.iter_mut().enumerate() {
+                                for (ix, h) in row.iter_mut().enumerate() {
+                                    for iy in 0..32 {
+                                        let b = c[pidx(ix + 1, iy + 1, iz + 1)];
+                                        let plant = [LOG, LEAVES, PINE_LOG, PINE_NEEDLES];
+                                        if b != AIR && b != WATER && !plant.contains(&b) {
+                                            *h = (*h).max(key.origin()[1] + iy as i64);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        for h in top.iter().flatten() {
+                            *heights.entry(*h).or_insert(0u32) += 1;
+                        }
+                        patches += 1;
+                        if *heights.values().max().unwrap() as f32 >= 0.8 * 1024.0 {
+                            level += 1;
+                        }
+                        if patches == PATCHES {
+                            break 'search;
+                        }
+                    }
+                }
+                assert_eq!(patches, PATCHES, "{} is short of dry land", t.theme.name);
+                assert!(
+                    level * 10 >= patches,
+                    "{}: only {level} of {patches} patches are level",
+                    t.theme.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn plains_stop_short_of_the_mountains() {
+        let g = Generator::new(777);
+        let t = &g.tiers()[1];
+        let mut seen = 0;
+        for i in 0..4000 {
+            let (x, z) = ((i % 64 * 90) as f64, (i / 64 * 90) as f64);
+            let f = g.field(t, x, z);
+            if f.mountain >= 0.3 {
+                seen += 1;
+                assert_eq!(f.rough, 1.0, "smoothed mountain at {x}, {z}");
+            }
+        }
+        assert!(seen > 50, "only {seen} samples landed on mountains");
     }
 
     #[test]

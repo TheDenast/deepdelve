@@ -66,6 +66,13 @@ The `THEMES` table in `generator.rs` defines each layer, from its blocks and tre
 and fog, so changing a layer's character is mostly a matter of changing numbers there. Chunks past
 the bedrock are all air, so the void costs almost nothing.
 
+**Ground roughness** is set by each theme's `Ground`. A noise field marks out plains, which scale
+down the hills and every smaller layer of floor noise, passed along as `Field::rough`. A tilt would
+remain, because the land's height drifts slowly over kilometres, and in blocks a tilt looks like
+evenly spaced stripes. So `shelve()` also moves a plain's height onto level shelves joined by ramps.
+Mountains keep their full noise. Chasms only open 10 blocks or more above the liquid, so a change
+to a layer's floor can add or remove a chasm, which also changes the layer below.
+
 Two costs are avoided. Slow 2D fields are computed on a coarse lattice and interpolated.
 3D noise is computed lazily on another lattice, and only near surfaces. Chunks outside a
 tier's height band skip all of it. Trees are found by hashing grid cells, so a chunk knows
@@ -162,9 +169,9 @@ blocks/s row above:
 
 | Layer | Frame mean | p99 | GPU terrain | Quads stored |
 | --- | --- | --- | --- | --- |
-| Overworld | 8.3 ms | 16.9 | 3.0 ms | 9M |
-| Dark Forest | 9.9 ms | 20.2 | 4.1 ms | 15M |
-| Underworld | 8.1 ms | 16.0 | 2.9 ms | 10M |
+| Overworld | 7.6 ms | 15.8 | 2.7 ms | 8.4M |
+| Dark Forest | 10.0 ms | 19.0 | 4.2 ms | 14M |
+| Underworld | 8.2 ms | 16.0 | 2.9 ms | 10M |
 
 A real window can be tested with no display of your own, inside weston:
 

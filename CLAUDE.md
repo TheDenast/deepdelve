@@ -79,6 +79,9 @@ a release: only `play release` does, and it refuses to run with uncommitted chan
 - **Changing the version in `Cargo.toml` needs a `cargo build`,** to update `Cargo.lock`.
 - **Tour screenshots with big white lines** just mean the camera ended up inside rock. It's the
   block outline, and not a rendering bug.
+- **Comparing two versions of the terrain:** tour PNGs differ between identical runs, so compare
+  hashes of generated chunks instead. Give each copy of the code its own `CARGO_TARGET_DIR`. Sharing
+  one silently re-ran the old build once, and made two versions look identical.
 
 ## Code conventions
 
