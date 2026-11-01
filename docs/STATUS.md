@@ -1,24 +1,17 @@
 # Status
 
 Where the work stands. Update this before finishing any piece of work. For what's in the working
-tree right now, check `git status` and `git log a0.1.0..HEAD`, since this file won't keep up with
+tree right now, check `git status` and `git log a0.2.0..HEAD`, since this file won't keep up with
 those.
 
 ## Current focus
 
-Adding variety to the world, now that the release system is in place. The user wants to experiment
-with features, one request at a time.
+`a0.2.0` is out, and the user is moving on to other work. They want to experiment with features,
+one request at a time.
 
-## Since the last release (`a0.1.0`)
+## Since the last release (`a0.2.0`)
 
-- Three themed layers instead of 45 random tiers: Overworld, Dark Forest, Underworld.
-- Bedrock and void at both ends of the world.
-- Lava, as a second liquid.
-- Every texture regenerated from code.
-- Level plains between the hills in the Overworld and Dark Forest, with calmer ground overall.
-- Each block's texture gets a random orientation, and ground textures are evened out, to hide repeats.
-- The version number hasn't been bumped, so these builds still call themselves `a0.1.0`. Packaged
-  builds show that exactly, and cargo builds show `a0.1.0-dev`.
+Nothing yet.
 
 ## Known issues
 
@@ -36,6 +29,4 @@ with features, one request at a time.
 
 ## Next
 
-- Have the user play it, then fix what they find. Start with the issues above.
-- Cut `a0.2.0` when they're happy, following `docs/RELEASES.md`.
-- After that, whatever the user picks. `docs/DESIGN.md` has a list of ideas.
+- Whatever the user picks. `docs/DESIGN.md` has a list of ideas, and the issues above are open.
