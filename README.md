@@ -52,7 +52,7 @@ cargo test --release                                  # unit tests
 ./target/release/deepdelve --headless --tour out/     # screenshots of every layer
 ./target/release/deepdelve --headless --bench 20 --bench-speed 600 --size 2560x1440
 ./target/release/deepdelve --headless --tier 2 --bench 20   # the same, in a lower layer
-./target/release/deepdelve --headless --shot view.png@172,300,875,0,-0.15   # x,y,z,yaw,pitch
+./target/release/deepdelve --headless --shot view.png@326,110,-1106,0.6,-0.12   # x,y,z,yaw,pitch
 ```
 
 ## Documentation

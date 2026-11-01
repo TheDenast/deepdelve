@@ -19,7 +19,7 @@ import (
 const (
 	// The fixed world and viewpoint that makes snapshots comparable between versions.
 	snapshotSeed = "777"
-	snapshotView = "172,300,875,0,-0.15"
+	snapshotView = "326,110,-1106,0.6,-0.12"
 	snapshotSize = "2560x1440"
 
 	screenshotWidth   = 1920
