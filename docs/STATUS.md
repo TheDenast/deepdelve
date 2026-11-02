@@ -7,7 +7,8 @@ those.
 ## Current focus
 
 For the next version, the user asked for Minecraft's creative mode: block placement, then
-collision, walking and jumping, with a key to turn collision off for free flight. Both are done.
+collision, walking and jumping, with a key to turn collision off for free flight, then a creative
+inventory that scales to many more blocks. All are done.
 
 ## Since the last release (`a0.2.0`)
 
@@ -15,6 +16,8 @@ collision, walking and jumping, with a key to turn collision off for free flight
   mouse button.
 - Collision, walking, jumping, sneaking and swimming, creative flight on a double tap of Space,
   and N for noclip, the old free flight. The player now spawns on the ground.
+- A creative inventory on E, after early Minecraft: every placeable block in a scrolling window, to
+  drag or click onto the hotbar.
 
 ## Known issues
 
@@ -26,6 +29,9 @@ collision, walking and jumping, with a key to turn collision off for free flight
 - **Building and walking haven't been played.** Every new key and mouse button is untested in a
   real window, and the movement numbers (speeds, jump, acceleration, the 0.3 s double tap) only
   match Minecraft on paper. They're constants at the top of `src/player.rs`.
+- **The inventory has only been driven by tests,** never with a real pointer. Watch for the
+  pointer not appearing or not lining up with the slots, which would be a window or scaling issue
+  in `src/app.rs`. With 20 blocks the list fits without scrolling, so only tests have scrolled it.
 - **The world's underside is very dim** when seen from the void below.
 - **Ground may now look too plain.** Evening out made grass and sand much smoother from a distance.
   If so, lower `PASSES` in `Canvas::even_out`, though the repeat will start to come back.

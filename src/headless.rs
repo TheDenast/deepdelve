@@ -2,6 +2,7 @@
 //! benchmarks and an end-to-end block-breaking test.
 
 use crate::game::{Game, Input};
+use crate::inventory::Spot;
 use crate::player::{self, Mode};
 use crate::render::{MAX_SLOTS, POOL_QUADS, Renderer};
 use crate::world::block::{BEDROCK, is_opaque};
@@ -154,6 +155,12 @@ pub fn run(opts: crate::Options) {
     game.occlusion = opts.occlusion;
     // Views and benchmarks put the camera where they want it, which needs free flight.
     game.body.mode = Mode::Noclip;
+    if opts.inventory {
+        game.inventory.open = true;
+        if let Some(p) = game.inventory.slot_centre(Spot::List(0), size) {
+            game.inventory.cursor = p;
+        }
+    }
     let mut o = Offscreen {
         renderer,
         game,
@@ -474,6 +481,7 @@ fn break_test(o: &mut Offscreen) {
     );
 
     walk_test(o, pos, target);
+    inventory_test(o, target);
 
     // Bedrock is the one thing that can't be broken.
     o.game.pos = DVec3::new(pos.x, WORLD_TOP as f64 + 6.5, pos.z);
@@ -584,4 +592,44 @@ fn walk_test(o: &mut Offscreen, pos: DVec3, target: [i64; 3]) {
     );
     o.game.body.mode = Mode::Noclip;
     println!("walk test ok: landed, jumped {peak:.2} blocks, switched modes");
+}
+
+/// Drags a block from the creative inventory onto the hotbar, then places it. Expects
+/// the player standing on `target` and looking down at it, in noclip.
+fn inventory_test(o: &mut Offscreen, target: [i64; 3]) {
+    const DT: f32 = 1.0 / 60.0;
+    let size = o.size;
+    let g = &mut o.game;
+    let last = crate::world::block::CREATIVE.len() - 1;
+    let block = crate::world::block::CREATIVE[last];
+    g.inventory.toggle();
+    let from = g.inventory.slot_centre(Spot::List(last), size).unwrap();
+    let to = g.inventory.slot_centre(Spot::Hotbar(8), size).unwrap();
+    g.inventory.press(from, false, &mut g.hotbar, g.slot, size);
+    g.inventory.moved(to, size);
+    g.inventory.release(to, &mut g.hotbar, size);
+    assert_eq!(
+        g.hotbar[8], block,
+        "the dragged block must land in the hotbar"
+    );
+
+    let place = Input {
+        placing: true,
+        slot: Some(8),
+        ..Default::default()
+    };
+    let above = [target[0], target[1] + 1, target[2]];
+    let at = |o: &Offscreen| o.game.streamer.block_at(above[0], above[1], above[2]);
+    o.step(DT, &place);
+    assert!(
+        !at(o).is_some_and(is_opaque),
+        "clicks must not reach the world while the inventory is open"
+    );
+    o.game.inventory.toggle();
+    o.step(DT, &place);
+    assert_eq!(at(o), Some(block), "the new hotbar block must place");
+    println!(
+        "inventory test ok: dragged {} to the hotbar and placed it",
+        crate::world::block::name(block)
+    );
 }

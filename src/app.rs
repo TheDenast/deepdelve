@@ -33,6 +33,10 @@ struct App {
     keys: Keys,
     look: Vec2,
     scroll: f32,
+    /// Where the pointer is, in window pixels, for the inventory.
+    cursor: Vec2,
+    /// Wheel movement not yet turned into whole inventory rows.
+    inventory_scroll: f32,
     reset_pressed: bool,
     pick_pressed: bool,
     jump_pressed: bool,
@@ -362,15 +366,56 @@ impl ApplicationHandler for App {
                         }
                     }
                     KeyCode::F12 if pressed && !event.repeat => self.screenshot = true,
+                    KeyCode::KeyE if pressed && !event.repeat => {
+                        if let Some(r) = &mut self.running {
+                            r.game.inventory.toggle();
+                            let open = r.game.inventory.open;
+                            self.set_capture(!open);
+                        }
+                    }
                     KeyCode::Escape if pressed && !event.repeat => {
-                        let on = !self.captured;
-                        self.set_capture(on);
+                        if let Some(r) = &mut self.running
+                            && r.game.inventory.open
+                        {
+                            r.game.inventory.close();
+                            self.set_capture(true);
+                        } else {
+                            let on = !self.captured;
+                            self.set_capture(on);
+                        }
                     }
                     _ => {}
                 }
             }
+            WindowEvent::CursorMoved { position, .. } => {
+                self.cursor = Vec2::new(position.x as f32, position.y as f32);
+                if let Some(r) = &mut self.running
+                    && r.game.inventory.open
+                {
+                    let size = (r.config.width, r.config.height);
+                    r.game.inventory.moved(self.cursor, size);
+                }
+            }
             WindowEvent::MouseInput { state, button, .. } => {
                 let pressed = state == ElementState::Pressed;
+                if let Some(r) = &mut self.running
+                    && r.game.inventory.open
+                {
+                    let g = &mut r.game;
+                    let size = (r.config.width, r.config.height);
+                    match (button, pressed) {
+                        (MouseButton::Left, true) => {
+                            let shift = self.keys.sprint;
+                            g.inventory
+                                .press(self.cursor, shift, &mut g.hotbar, g.slot, size);
+                        }
+                        (MouseButton::Left, false) => {
+                            g.inventory.release(self.cursor, &mut g.hotbar, size);
+                        }
+                        _ => {}
+                    }
+                    return;
+                }
                 if pressed && !self.captured {
                     // The click that recaptures the mouse doesn't also act.
                     if button == MouseButton::Left {
@@ -386,10 +431,19 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                self.scroll += match delta {
+                let lines = match delta {
                     MouseScrollDelta::LineDelta(_, y) => y,
                     MouseScrollDelta::PixelDelta(p) => p.y as f32 / 40.0,
                 };
+                match &mut self.running {
+                    Some(r) if r.game.inventory.open => {
+                        self.inventory_scroll += lines;
+                        let steps = self.inventory_scroll.trunc();
+                        self.inventory_scroll -= steps;
+                        r.game.inventory.wheel(steps as i32);
+                    }
+                    _ => self.scroll += lines,
+                }
             }
             WindowEvent::RedrawRequested => self.frame(event_loop),
             _ => {}
@@ -421,6 +475,8 @@ pub fn run(opts: crate::Options) {
         keys: Keys::default(),
         look: Vec2::ZERO,
         scroll: 0.0,
+        cursor: Vec2::ZERO,
+        inventory_scroll: 0.0,
         reset_pressed: false,
         pick_pressed: false,
         jump_pressed: false,

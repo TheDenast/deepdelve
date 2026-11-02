@@ -3,6 +3,7 @@
 mod app;
 mod game;
 mod headless;
+mod inventory;
 mod mesher;
 mod player;
 mod render;
@@ -27,6 +28,7 @@ pub struct Options {
     pub occlusion: bool,
     pub exit_after: f32,
     pub hud: bool,
+    pub inventory: bool,
 }
 
 /// The release name, such as "a0.1.0". Only packaged builds (see flake.nix) claim to be
@@ -60,6 +62,7 @@ fn print_help() {
            --tier N            start in this layer: 0 top, 1 middle, 2 bottom (default 0)\n  \
            --no-occlusion      turn occlusion culling off, for comparisons\n  \
            --hud               draw the crosshair and hotbar in screenshots\n  \
+           --inventory         draw the inventory open in screenshots, pointing at a block\n  \
            --exit-after SECS   windowed mode: quit after this long and print a summary\n"
     );
 }
@@ -83,6 +86,7 @@ fn parse_args() -> Options {
         occlusion: true,
         exit_after: 0.0,
         hud: false,
+        inventory: false,
     };
     let mut args = std::env::args().skip(1);
     let need = |v: Option<String>, flag: &str| -> String {
@@ -133,6 +137,10 @@ fn parse_args() -> Options {
             "--tier" => o.tier = num(need(args.next(), &a), &a) as i32,
             "--no-occlusion" => o.occlusion = false,
             "--hud" => o.hud = true,
+            "--inventory" => {
+                o.hud = true;
+                o.inventory = true;
+            }
             "--exit-after" => o.exit_after = num(need(args.next(), &a), &a) as f32,
             other => {
                 eprintln!("unknown option: {other}\n");

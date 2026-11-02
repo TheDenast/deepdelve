@@ -1,11 +1,12 @@
 //! Game state that doesn't depend on a window: camera, streaming and editing.
 
+use crate::inventory::{self, Inventory, block_icon};
 use crate::player::{self, Aabb, Body, Mode, Wish};
 use crate::render::{ChunkGpu, FrameParams, HudRect, font};
 use crate::stream::{ChunkSink, Streamer};
 use crate::world::block::{
     self, AIR, COBBLE, CRYSTAL, DIRT, GRASS, LAVA, LEAVES, LOG, PINE_LOG, PINE_NEEDLES, SAND,
-    SLATE, STONE, WATER, face_layer, is_breakable, is_emissive, is_opaque, is_placeable,
+    SLATE, STONE, WATER, is_breakable, is_opaque, is_placeable,
 };
 use crate::world::generator::{WORLD_BOTTOM, WORLD_TOP};
 use crate::world::noise::{smoothstep, splitmix};
@@ -67,6 +68,7 @@ pub struct Game {
     pub last_remesh: Option<(usize, f32)>,
     pub occlusion: bool,
     pub body: Body,
+    pub inventory: Inventory,
     /// Waiting to put the player on the ground, once the chunks below have loaded.
     spawning: bool,
     last_jump_press: f32,
@@ -100,6 +102,7 @@ impl Game {
             last_remesh: None,
             occlusion: true,
             body: Body::new(Mode::Walk),
+            inventory: Inventory::new(block::CREATIVE.to_vec()),
             spawning: true,
             last_jump_press: f32::MIN,
             scroll_steps: 0.0,
@@ -159,6 +162,16 @@ impl Game {
     /// One game step. Returns true when the world was reset.
     pub fn update(&mut self, dt: f32, input: &Input, gpu: &mut ChunkGpu) -> bool {
         self.time += dt;
+        // While the inventory is open, the mouse and movement keys belong to it.
+        let input = &if self.inventory.open {
+            Input {
+                slot: input.slot,
+                reset: input.reset,
+                ..Default::default()
+            }
+        } else {
+            *input
+        };
         let mut reset = false;
         if input.reset {
             self.new_world();
@@ -464,20 +477,23 @@ impl Game {
         }
     }
 
-    /// Nine slots along the bottom of the screen, with the selected block's name above
-    /// them for a moment after it changes.
-    fn build_hotbar(&self, out: &mut Vec<HudRect>, w: f32, h: f32) {
-        // Grows in whole steps with the screen, like Minecraft's GUI scale.
-        let scale = (h / 360.0).floor().max(1.0);
-        // Crystal takes the colour of the layer it's in, so the icon shows this one's.
+    /// Crystal's colour in the layer around the player, for its icons.
+    fn crystal_colour(&self) -> Vec3 {
         let c = self
             .streamer
             .generator()
             .tier_near(self.pos.y)
             .theme
             .crystal;
-        let crystal = Vec3::new(c[0] as f32, c[1] as f32, c[2] as f32).powf(2.0);
-        let crystal = crystal / crystal.max_element().max(1.0);
+        let c = Vec3::new(c[0] as f32, c[1] as f32, c[2] as f32).powf(2.0);
+        c / c.max_element().max(1.0)
+    }
+
+    /// Nine slots along the bottom of the screen, with the selected block's name above
+    /// them for a moment after it changes.
+    fn build_hotbar(&self, out: &mut Vec<HudRect>, w: f32, h: f32) {
+        let scale = inventory::gui_scale(h as u32);
+        let crystal = self.crystal_colour();
         let slot = 20.0 * scale;
         let n = self.hotbar.len() as f32;
         let x0 = (w * 0.5 - slot * n * 0.5).round();
@@ -502,8 +518,16 @@ impl Game {
                 ],
                 [0.3, 0.3, 0.3, 0.35],
             ));
-            let tint = if b == CRYSTAL { crystal } else { Vec3::ONE };
-            block_icon(out, b, tint, x + slot * 0.5, y0 + slot * 0.5, slot * 0.36);
+            if b != AIR {
+                block_icon(
+                    out,
+                    b,
+                    crystal,
+                    x + slot * 0.5,
+                    y0 + slot * 0.5,
+                    slot * 0.36,
+                );
+            }
         }
         // The selection frame, two pixels wide and a little outside its slot.
         let (fx, fy) = (x0 + self.slot as f32 * slot - scale, y0 - scale);
@@ -519,7 +543,7 @@ impl Game {
         }
 
         let age = self.time - self.slot_changed_at;
-        if age < NAME_SHOWN {
+        if age < NAME_SHOWN && self.hotbar[self.slot] != AIR {
             let alpha = smoothstep(NAME_SHOWN, NAME_SHOWN - 0.5, age);
             let text = block::name(self.hotbar[self.slot]).to_uppercase();
             let tw = text.len() as f32 * 6.0 * scale - scale;
@@ -548,21 +572,37 @@ impl Game {
         out.clear();
         let (w, h) = (size.0 as f32, size.1 as f32);
         let scale = (h / 720.0).round().max(1.0);
-        let arm = 8.0 * scale;
-        let thick = scale.max(2.0);
-        let white = [1.0, 1.0, 1.0, 0.75];
-        out.push(HudRect::flat(
-            [w * 0.5 - arm, h * 0.5 - thick * 0.5, arm * 2.0, thick],
-            white,
-        ));
-        out.push(HudRect::flat(
-            [w * 0.5 - thick * 0.5, h * 0.5 - arm, thick, arm * 2.0],
-            white,
-        ));
-        self.build_hotbar(out, w, h);
-        if !show_text {
-            return;
+        // The inventory has its own copy of the hotbar.
+        if !self.inventory.open {
+            let arm = 8.0 * scale;
+            let thick = scale.max(2.0);
+            let white = [1.0, 1.0, 1.0, 0.75];
+            out.push(HudRect::flat(
+                [w * 0.5 - arm, h * 0.5 - thick * 0.5, arm * 2.0, thick],
+                white,
+            ));
+            out.push(HudRect::flat(
+                [w * 0.5 - thick * 0.5, h * 0.5 - arm, thick, arm * 2.0],
+                white,
+            ));
+            self.build_hotbar(out, w, h);
         }
+        if show_text {
+            self.build_stats(out, scale, fps, frame);
+        }
+        if self.inventory.open {
+            let crystal = self.crystal_colour();
+            self.inventory.build(out, &self.hotbar, size, crystal);
+        }
+    }
+
+    fn build_stats(
+        &self,
+        out: &mut Vec<HudRect>,
+        scale: f32,
+        fps: f32,
+        frame: &crate::render::FrameStats,
+    ) {
         let s = &self.streamer.stats;
         let tier = self.streamer.generator().tier_near(self.pos.y);
         let lines = [
@@ -612,7 +652,8 @@ impl Game {
                 None => "WASD MOVE   SPACE JUMP, TWICE TO FLY   C DOWN   SHIFT FAST   N NOCLIP"
                     .to_string(),
             },
-            "LMB BREAK   RMB PLACE   MMB PICK   1-9 OR WHEEL BLOCK   R NEW WORLD".to_string(),
+            "LMB BREAK   RMB PLACE   MMB PICK   1-9 OR WHEEL BLOCK   E INVENTORY   R NEW WORLD"
+                .to_string(),
         ];
         let lh = 9.0 * scale;
         for (i, line) in lines.iter().enumerate() {
@@ -621,25 +662,4 @@ impl Game {
             font::draw_text(out, line, 8.0, y, scale, [1.0, 1.0, 0.92, 1.0]);
         }
     }
-}
-
-/// A block drawn as a cube seen from above, as three shaded faces of a regular hexagon
-/// of radius `r` around (cx, cy). `tint` multiplies its texture.
-fn block_icon(out: &mut Vec<HudRect>, b: u8, tint: Vec3, cx: f32, cy: f32, r: f32) {
-    let s = r * 0.866;
-    let lit = if is_emissive(b) { 0.3 } else { 0.0 };
-    let mut face = |pos: [f32; 2], edges: [f32; 4], dir: u8, shade: f32| {
-        let c = tint * (shade + (1.0 - shade) * lit);
-        out.push(HudRect {
-            pos,
-            edges,
-            layer: face_layer(b, dir) as f32,
-            pad: 0.0,
-            color: c.extend(1.0).to_array(),
-        });
-    };
-    let upper_left = [cx - s, cy - r * 0.5];
-    face(upper_left, [s, -r * 0.5, s, r * 0.5], 2, 1.0);
-    face(upper_left, [s, r * 0.5, 0.0, r], 4, 0.78);
-    face([cx, cy], [s, -r * 0.5, 0.0, r], 0, 0.6);
 }

@@ -100,6 +100,8 @@ changes.
 - **Textures are code.** Paint them in `src/bin/gen_textures.rs`, regenerate, and commit the PNGs.
   Never edit the PNGs by hand. New ones also need a line in `texture_layers!` in
   `src/world/block.rs`, and a test checks any layer numbers `shaders/terrain.wgsl` relies on.
+- **New blocks need a name** in `block::name`, and a place in `CREATIVE` if they can be placed,
+  which is the inventory's order. Tests check both.
 - **Every block texture gets turned and flipped at random.** One with a definite up must be added
   to the `upright` list in `block_orientation` in `shaders/terrain.wgsl`. Large even surfaces also
   need `.even_out()` in their painter, or the turned blocks form a visible grid.

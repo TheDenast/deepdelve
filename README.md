@@ -40,8 +40,9 @@ nix run .#play
 | Right mouse | Place the selected block (hold to repeat) |
 | Middle mouse | Pick the block you look at into the hotbar |
 | 1-9 | Choose a hotbar slot |
+| E | Open the inventory of every block: drag or click blocks onto the hotbar, shift-click to add one |
 | R | Wipe the world and generate a new one |
-| Esc | Release or recapture the mouse |
+| Esc | Close the inventory, or release and recapture the mouse |
 | F1 | Toggle the stats overlay |
 | F2 | Toggle occlusion culling |
 | F12 | Save a screenshot to `captures/` |
@@ -60,6 +61,7 @@ cargo test --release                                  # unit tests
 ./target/release/deepdelve --headless --tier 2 --bench 20   # the same, in a lower layer
 ./target/release/deepdelve --headless --shot view.png@326,110,-1106,0.6,-0.12   # x,y,z,yaw,pitch
 ./target/release/deepdelve --headless --hud --shot view.png        # the spawn view, with the hotbar drawn
+./target/release/deepdelve --headless --inventory --shot inv.png    # the same, with the inventory open
 ```
 
 ## Documentation

@@ -27,6 +27,7 @@ textures, as directed by our shaders and draw commands.
 | `src/stream.rs` | Octree of wanted chunks, worker threads, draw selection, edits |
 | `src/game.rs` | Camera, raycast, breaking and placing, hotbar, atmosphere, HUD |
 | `src/player.rs` | Walking, jumping, swimming and creative flight against the voxel grid |
+| `src/inventory.rs` | The creative inventory window: layout, clicks and drags, scrolling, block icons |
 | `src/app.rs` | Window, input, presentation |
 | `src/headless.rs` | Off-screen runs: screenshots, benchmark, end-to-end test |
 | `src/render/mod.rs` | All GPU work: buffers, culling, passes |
@@ -156,9 +157,12 @@ the shader, so if it moved too, the machine was busy.
 writes solid glowing colour. Its pattern is warped by large-scale noise, because a repeating
 texture otherwise shows up as a grid across a whole lake.
 
-**The HUD** is one instanced draw of parallelograms in pixels: text, crosshair and hotbar. Each
-can sample the block texture array, so a hotbar icon is three faces of a cube, drawn as a hexagon.
-Crystal's icon takes the current layer's crystal colour, as the block does in the world.
+**The HUD** is one instanced draw of parallelograms in pixels: text, crosshair, hotbar and the
+inventory window. Each can sample the block texture array, so a block icon is three faces of a
+cube, drawn as a hexagon. The inventory is laid out in GUI pixels, as Minecraft's is, scaled by a
+whole number that grows with the screen's height. Its colours are given in sRGB and converted,
+since the HUD writes linear values to an sRGB target. Crystal's icon takes the current layer's
+crystal colour, as the block does in the world.
 
 **Light** is a 5x5x5 byte grid per chunk, sampled from the same fields as the terrain and
 interpolated per vertex, so it costs nothing per block and keeps quads mergeable. Being a
@@ -193,13 +197,14 @@ quads drawn stay near 1M in most views, so views packed with geometry can cost m
 
 ## Verifying a change
 
-`cargo test --release` covers the mesher, allocator, octree and player movement.
+`cargo test --release` covers the mesher, allocator, octree, player movement and inventory.
 `deepdelve --headless` with no other options runs the full game path against generated terrain:
 it breaks a block through a raycast, checks the edit survives flying away and back, places a
-block back into the hole and picks it, lands on that block and jumps, then checks the R reset. A
-headless `--tour` gives screenshots of every layer and both ends of the world, for judging
-terrain and rendering changes. `--hud` adds the crosshair and hotbar to screenshots. Current
-numbers per layer, with the same settings as the 2560x1440, 120 blocks/s row above:
+block back into the hole and picks it, lands on that block and jumps, drags a block from the
+inventory onto the hotbar and places it, then checks the R reset. A headless `--tour` gives
+screenshots of every layer and both ends of the world, for judging terrain and rendering changes.
+`--hud` adds the crosshair and hotbar to screenshots, and `--inventory` the open inventory.
+Current numbers per layer, with the same settings as the 2560x1440, 120 blocks/s row above:
 
 | Layer | Frame mean | p99 | GPU terrain | Quads stored |
 | --- | --- | --- | --- | --- |

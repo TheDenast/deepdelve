@@ -28,6 +28,8 @@ implementation and is open to change.
 | Graphics stack | wgpu, no game engine | Player |
 | Block placement | Like Minecraft's creative mode: place, break, pick blocks into a hotbar | Player |
 | Hotbar | Nine slots chosen with 1-9, starting with common building blocks. Middle click picks the block you look at, selecting its slot if it's already there | Engineering |
+| Inventory | One window listing every placeable block, with a scrollbar, to drag onto the hotbar, as in early Minecraft's creative mode | Player |
+| Using the inventory | E opens it and E or Esc closes it. Blocks can be dragged, or clicked up and clicked down as in Minecraft. Shift-click fills the first empty hotbar slot. A block let go outside the window or over the list is thrown away, and dragging between hotbar slots swaps them | Engineering |
 | What can be placed | Every solid block but bedrock, which couldn't be broken again. Water and lava can't, because their surfaces always snap to the layer's liquid level | Engineering |
 | Movement | Collision, walking and jumping, as in Minecraft's creative mode | Player |
 | Turning collision off | One key switches to free flight through everything, and back | Player |
@@ -85,8 +87,8 @@ mountains, and a few embers glow in the ceiling.
 
 ## Known simplifications at this stage
 
-- No inventory screen, no creatures, no health or fall damage. The hotbar only fills by picking
-  blocks from the world. Sneaking doesn't lower the camera, and there's no auto-jump.
+- No creatures, no health or fall damage. Sneaking doesn't lower the camera, and there's no
+  auto-jump.
 - Crystal and lava don't cast local light. They look like they do because the ambient field
   follows them at large scale, but a single colony you carve free or place won't brighten what's
   nearby.
@@ -98,4 +100,4 @@ mountains, and a few embers glow in the ceiling.
 ## Ideas for later
 
 Flowing water and lava; tunnels joining caverns horizontally; local light from crystal and lava;
-ground plants; biomes within a layer; an inventory screen; auto-jump.
+ground plants; biomes within a layer; auto-jump.

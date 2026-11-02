@@ -92,6 +92,31 @@ pub fn is_placeable(b: u8) -> bool {
     is_opaque(b) && b != BEDROCK && b <= ASH
 }
 
+/// Every placeable block, in the order the creative inventory lists them: kinds of rock,
+/// then ground, ores, trees and light.
+pub const CREATIVE: &[u8] = &[
+    STONE,
+    COBBLE,
+    MOSSY_COBBLE,
+    SLATE,
+    BASALT,
+    DIRT,
+    GRASS,
+    DARK_DIRT,
+    DARK_GRASS,
+    SAND,
+    GRAVEL,
+    ASH,
+    COAL,
+    IRON,
+    LOG,
+    LEAVES,
+    PINE_LOG,
+    PINE_NEEDLES,
+    CRYSTAL,
+    EMBER,
+];
+
 /// The name shown when a block is selected.
 pub fn name(b: u8) -> &'static str {
     match b {
@@ -202,6 +227,14 @@ mod tests {
         for b in 0..=u8::MAX {
             let expected = is_opaque(b) && is_breakable(b) && name(b) != "Unknown";
             assert_eq!(is_placeable(b), expected, "block {b} ({})", name(b));
+        }
+    }
+
+    #[test]
+    fn the_creative_inventory_lists_every_placeable_block_once() {
+        for b in 0..=u8::MAX {
+            let n = CREATIVE.iter().filter(|&&c| c == b).count();
+            assert_eq!(n, is_placeable(b) as usize, "block {b} ({})", name(b));
         }
     }
 }
