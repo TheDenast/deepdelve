@@ -111,7 +111,15 @@ fn parse_args() -> Options {
                 println!("deepdelve {}", version());
                 std::process::exit(0);
             }
-            "--seed" => o.seed = num(need(args.next(), &a), &a) as u64,
+            // Parsed as an integer: going through f64 would round seeds above 2^53, so that
+            // seeds printed in logs couldn't be replayed.
+            "--seed" => {
+                let v = need(args.next(), &a);
+                o.seed = v.parse().unwrap_or_else(|_| {
+                    eprintln!("--seed: not a whole number: {v}");
+                    std::process::exit(2);
+                });
+            }
             "--render-height" => o.render_height = num(need(args.next(), &a), &a) as u32,
             "--no-vsync" => o.vsync = false,
             "--fullscreen" => o.fullscreen = true,
