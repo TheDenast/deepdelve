@@ -85,6 +85,9 @@ changes.
 - **Changing Go dependencies invalidates `vendorHash` in `flake.nix`.** Set it to `lib.fakeHash`,
   run `nix build .#play`, and copy the correct hash from the error.
 - **Changing the version in `Cargo.toml` needs a `cargo build`,** to update `Cargo.lock`.
+- **`play release` runs the end-to-end test on a random seed,** so a test that depends on the
+  terrain can pass locally and fail there. Replay the seed it prints with `--seed`, and try a few
+  random runs before releasing.
 - **Tour screenshots with big white lines** just mean the camera ended up inside rock. It's the
   block outline, and not a rendering bug.
 - **Comparing two versions of the terrain:** tour PNGs differ between identical runs, so compare

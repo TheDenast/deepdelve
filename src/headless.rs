@@ -5,7 +5,7 @@ use crate::game::{Game, Input};
 use crate::inventory::Spot;
 use crate::player::{self, Mode};
 use crate::render::{MAX_SLOTS, POOL_QUADS, Renderer};
-use crate::world::block::{BEDROCK, is_opaque};
+use crate::world::block::{AIR, BEDROCK, is_opaque};
 use crate::world::generator::{WORLD_BOTTOM, WORLD_TOP};
 use glam::{DVec3, Vec3};
 
@@ -385,14 +385,30 @@ fn tour(o: &mut Offscreen, dir: &str) {
 
 /// Exercises the whole break path against generated terrain and checks it.
 fn break_test(o: &mut Offscreen) {
+    // A solid block with open air above it, for the camera and for walking. The spawn
+    // point can be inside a treetop, so nearby columns are tried too.
     let (pos, target) = {
         let g = &o.game.streamer;
-        let mut y = o.game.pos.y.floor() as i64;
-        let x = o.game.pos.x.floor() as i64;
-        let z = o.game.pos.z.floor() as i64;
-        while y > WORLD_BOTTOM && !g.block_at(x, y, z).is_some_and(is_opaque) {
-            y -= 1;
+        let start = o.game.pos.floor().as_i64vec3();
+        let open = |x: i64, y: i64, z: i64| (1..=8).all(|k| g.block_at(x, y + k, z) == Some(AIR));
+        let mut found = None;
+        'search: for r in 0..16i64 {
+            for dz in -r..=r {
+                for dx in -r..=r {
+                    if dx.abs().max(dz.abs()) != r {
+                        continue;
+                    }
+                    let (x, z) = (start.x + dx, start.z + dz);
+                    for y in (start.y - 200..=start.y + 32).rev() {
+                        if g.block_at(x, y, z).is_some_and(is_opaque) && open(x, y, z) {
+                            found = Some([x, y, z]);
+                            break 'search;
+                        }
+                    }
+                }
+            }
         }
+        let [x, y, z] = found.expect("no open ground near the spawn point");
         (
             DVec3::new(x as f64 + 0.5, y as f64 + 6.5, z as f64 + 0.5),
             [x, y, z],
