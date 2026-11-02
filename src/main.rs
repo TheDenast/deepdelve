@@ -25,6 +25,7 @@ pub struct Options {
     pub tier: i32,
     pub occlusion: bool,
     pub exit_after: f32,
+    pub hud: bool,
 }
 
 /// The release name, such as "a0.1.0". Only packaged builds (see flake.nix) claim to be
@@ -57,6 +58,7 @@ fn print_help() {
            --bench-speed N     flight speed in blocks per second (default 120)\n  \
            --tier N            start in this layer: 0 top, 1 middle, 2 bottom (default 0)\n  \
            --no-occlusion      turn occlusion culling off, for comparisons\n  \
+           --hud               draw the crosshair and hotbar in screenshots\n  \
            --exit-after SECS   windowed mode: quit after this long and print a summary\n"
     );
 }
@@ -79,6 +81,7 @@ fn parse_args() -> Options {
         tier: 0,
         occlusion: true,
         exit_after: 0.0,
+        hud: false,
     };
     let mut args = std::env::args().skip(1);
     let need = |v: Option<String>, flag: &str| -> String {
@@ -128,6 +131,7 @@ fn parse_args() -> Options {
             "--bench-speed" => o.bench_speed = num(need(args.next(), &a), &a) as f32,
             "--tier" => o.tier = num(need(args.next(), &a), &a) as i32,
             "--no-occlusion" => o.occlusion = false,
+            "--hud" => o.hud = true,
             "--exit-after" => o.exit_after = num(need(args.next(), &a), &a) as f32,
             other => {
                 eprintln!("unknown option: {other}\n");

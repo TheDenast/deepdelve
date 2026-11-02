@@ -34,6 +34,8 @@ struct App {
     look: Vec2,
     scroll: f32,
     reset_pressed: bool,
+    pick_pressed: bool,
+    slot_pressed: Option<usize>,
     captured: bool,
     show_hud: bool,
     screenshot: bool,
@@ -54,6 +56,7 @@ struct Keys {
     down: bool,
     sprint: bool,
     breaking: bool,
+    placing: bool,
 }
 
 fn render_size(window: PhysicalSize<u32>, cap: u32) -> (u32, u32) {
@@ -109,11 +112,16 @@ impl App {
             look: self.look * MOUSE_SENSITIVITY,
             scroll: self.scroll,
             breaking: k.breaking && self.captured,
+            placing: k.placing && self.captured,
+            pick: self.pick_pressed,
+            slot: self.slot_pressed,
             reset: self.reset_pressed,
         };
         self.look = Vec2::ZERO;
         self.scroll = 0.0;
         self.reset_pressed = false;
+        self.pick_pressed = false;
+        self.slot_pressed = None;
 
         let Some(r) = &mut self.running else { return };
         if self.opts.exit_after > 0.0
@@ -334,6 +342,9 @@ impl ApplicationHandler for App {
                     KeyCode::KeyC | KeyCode::ControlLeft => self.keys.down = pressed,
                     KeyCode::ShiftLeft | KeyCode::ShiftRight => self.keys.sprint = pressed,
                     KeyCode::KeyR if pressed && !event.repeat => self.reset_pressed = true,
+                    _ if pressed && hotbar_key(code).is_some() => {
+                        self.slot_pressed = hotbar_key(code);
+                    }
                     KeyCode::F1 if pressed && !event.repeat => self.show_hud = !self.show_hud,
                     KeyCode::F2 if pressed && !event.repeat => {
                         if let Some(r) = &mut self.running {
@@ -348,16 +359,20 @@ impl ApplicationHandler for App {
                     _ => {}
                 }
             }
-            WindowEvent::MouseInput {
-                state,
-                button: MouseButton::Left,
-                ..
-            } => {
+            WindowEvent::MouseInput { state, button, .. } => {
                 let pressed = state == ElementState::Pressed;
                 if pressed && !self.captured {
-                    self.set_capture(true);
-                } else {
-                    self.keys.breaking = pressed;
+                    // The click that recaptures the mouse doesn't also act.
+                    if button == MouseButton::Left {
+                        self.set_capture(true);
+                    }
+                    return;
+                }
+                match button {
+                    MouseButton::Left => self.keys.breaking = pressed,
+                    MouseButton::Right => self.keys.placing = pressed,
+                    MouseButton::Middle if pressed => self.pick_pressed = true,
+                    _ => {}
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
@@ -397,6 +412,8 @@ pub fn run(opts: crate::Options) {
         look: Vec2::ZERO,
         scroll: 0.0,
         reset_pressed: false,
+        pick_pressed: false,
+        slot_pressed: None,
         captured: false,
         show_hud: true,
         screenshot: false,
@@ -407,4 +424,14 @@ pub fn run(opts: crate::Options) {
         frames: 0,
     };
     event_loop.run_app(&mut app).expect("event loop");
+}
+
+/// The hotbar slot a number key selects.
+fn hotbar_key(code: KeyCode) -> Option<usize> {
+    use KeyCode::*;
+    [
+        Digit1, Digit2, Digit3, Digit4, Digit5, Digit6, Digit7, Digit8, Digit9,
+    ]
+    .iter()
+    .position(|&k| k == code)
 }

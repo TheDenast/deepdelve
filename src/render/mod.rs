@@ -78,11 +78,30 @@ struct LineParams {
     pad: f32,
 }
 
+/// A HUD parallelogram in output pixels: a corner and the two edges leaving it, so that
+/// block icons can be drawn as cubes. `layer` picks a block texture to multiply `color`
+/// by, or is negative for flat colour.
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub struct HudRect {
-    pub rect: [f32; 4],
+    pub pos: [f32; 2],
+    pub edges: [f32; 4],
+    pub layer: f32,
+    pub pad: f32,
     pub color: [f32; 4],
+}
+
+impl HudRect {
+    /// A flat rectangle: x, y, width, height.
+    pub fn flat(rect: [f32; 4], color: [f32; 4]) -> Self {
+        Self {
+            pos: [rect[0], rect[1]],
+            edges: [rect[2], 0.0, 0.0, rect[3]],
+            layer: -1.0,
+            pad: 0.0,
+            color,
+        }
+    }
 }
 
 /// Everything one frame needs from the game.
@@ -677,22 +696,46 @@ impl Renderer {
         let hud_shader = shader(&device, "hud", include_str!("../../shaders/hud.wgsl"));
         let hud_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("hud"),
-            entries: &[uniform_entry(0, wgpu::ShaderStages::VERTEX)],
+            entries: &[
+                uniform_entry(0, wgpu::ShaderStages::VERTEX),
+                texture_entry(
+                    1,
+                    wgpu::ShaderStages::FRAGMENT,
+                    wgpu::TextureSampleType::Float { filterable: true },
+                    wgpu::TextureViewDimension::D2Array,
+                ),
+                sampler_entry(2, wgpu::ShaderStages::FRAGMENT),
+            ],
         });
         let hud_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("hud"),
             layout: &hud_bgl,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: hud_screen_buf.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: hud_screen_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&tex_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&tex_sampler),
+                },
+            ],
         });
         let hud_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("hud"),
             bind_group_layouts: &[Some(&hud_bgl)],
             immediate_size: 0,
         });
-        let hud_attrs = wgpu::vertex_attr_array![0 => Float32x4, 1 => Float32x4];
+        let hud_attrs = wgpu::vertex_attr_array![
+            0 => Float32x2,
+            1 => Float32x4,
+            2 => Float32x2,
+            3 => Float32x4,
+        ];
         let hud_pipe = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("hud"),
             layout: Some(&hud_layout),

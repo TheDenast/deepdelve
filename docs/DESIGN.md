@@ -2,7 +2,7 @@
 
 The fantasy: enormous caverns underground, with whole forests, lakes and seas in them. The
 current stage is a proof of concept, in which you fly around a generated world in spectator
-mode and can break blocks. Each decision below records who made it. "Player" means it was
+mode and can break and place blocks. Each decision below records who made it. "Player" means it was
 chosen during design consultation; "engineering" means it was left to implementation and
 is open to change.
 
@@ -26,6 +26,9 @@ is open to change.
 | Layer spacing, heights and exact colours | See the themes in `src/world/generator.rs` | Engineering |
 | Water | Static, with an animated surface. It never flows | Player |
 | Graphics stack | wgpu, no game engine | Player |
+| Block placement | Like Minecraft's creative mode: place, break, pick blocks into a hotbar | Player |
+| Hotbar | Nine slots chosen with 1-9, starting with common building blocks. Middle click picks the block you look at, selecting its slot if it's already there | Engineering |
+| What can be placed | Every solid block but bedrock, which couldn't be broken again. Water and lava can't, because their surfaces always snap to the layer's liquid level | Engineering |
 | Controls, flight speeds, reach of 96 blocks | See the table in the README | Engineering |
 
 ## World structure
@@ -75,11 +78,13 @@ mountains, and a few embers glow in the ceiling.
 
 ## Known simplifications at this stage
 
-- No gameplay: no collision, no block placing, no inventory, no creatures.
+- No collision, no inventory screen, no creatures. The hotbar only fills by picking blocks from
+  the world.
 - Crystal and lava don't cast local light. They look like they do because the ambient field
-  follows them at large scale, but a single colony you carve free won't brighten what's nearby.
-- Edits exist only at full detail: chunks beyond 384 blocks show the unedited world. They
-  also aren't saved to disk, and R discards them.
+  follows them at large scale, but a single colony you carve free or place won't brighten what's
+  nearby.
+- Edits exist only at full detail: chunks beyond 384 blocks show the unedited world, so placed
+  blocks vanish there too. Edits also aren't saved to disk, and R discards them.
 - Breaking a block below the water line leaves a hole of air beside a standing wall of water,
   and lava behaves the same. Touching lava does nothing, since there's no health or collision.
 

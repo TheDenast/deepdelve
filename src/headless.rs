@@ -41,6 +41,8 @@ struct Offscreen {
     texture: wgpu::Texture,
     view: wgpu::TextureView,
     size: (u32, u32),
+    /// Draws the HUD into screenshots, without the stats overlay.
+    hud: Option<Vec<crate::render::HudRect>>,
 }
 
 impl Offscreen {
@@ -48,9 +50,17 @@ impl Offscreen {
         if self.game.update(dt, input, &mut self.renderer.chunks) {
             self.renderer.invalidate_occlusion();
         }
-        let params = self.game.frame_params(&[]);
-        self.renderer
-            .render(&self.view, self.size, &self.game.streamer, &params)
+        let mut hud = self.hud.take();
+        if let Some(h) = &mut hud {
+            let stats = Default::default();
+            self.game.build_hud(h, self.size, false, 0.0, &stats);
+        }
+        let params = self.game.frame_params(hud.as_deref().unwrap_or(&[]));
+        let stats = self
+            .renderer
+            .render(&self.view, self.size, &self.game.streamer, &params);
+        self.hud = hud;
+        stats
     }
 
     /// Steps until every wanted chunk is built, or a time limit passes.
@@ -147,6 +157,7 @@ pub fn run(opts: crate::Options) {
         texture,
         view,
         size,
+        hud: opts.hud.then(Vec::new),
     };
 
     let t = o.settle(120.0);
@@ -382,7 +393,7 @@ fn break_test(o: &mut Offscreen) {
     o.game.yaw = 0.0;
     o.step(0.016, &Input::default());
     assert_eq!(
-        o.game.raycast(),
+        o.game.raycast().map(|h| h.block),
         Some(target),
         "ray must hit the block below"
     );
@@ -414,12 +425,61 @@ fn break_test(o: &mut Offscreen) {
     );
     println!("edit survived unloading: ok");
 
+    // Placing: the ray now passes through the hole and hits the block below it, so a
+    // new block goes back into the hole.
+    o.step(
+        0.016,
+        &Input {
+            slot: Some(1),
+            placing: true,
+            ..Default::default()
+        },
+    );
+    let placed = o.game.hotbar[1];
+    assert_eq!(
+        o.game.streamer.block_at(target[0], target[1], target[2]),
+        Some(placed),
+        "block must be placed in the hole"
+    );
+    assert_eq!(o.game.target.map(|h| h.block), Some(target));
+    let count = o.game.blocks_placed;
+    o.game.place_block(target, placed, &mut o.renderer.chunks);
+    assert_eq!(
+        o.game.blocks_placed, count,
+        "a solid cell must not be replaced"
+    );
+    // Picking the new block selects the slot it came from.
+    o.step(
+        0.016,
+        &Input {
+            slot: Some(4),
+            ..Default::default()
+        },
+    );
+    o.step(
+        0.016,
+        &Input {
+            pick: true,
+            ..Default::default()
+        },
+    );
+    assert_eq!(o.game.slot, 1, "pick must select the block's slot");
+    println!(
+        "place test ok: {} placed, remesh {:?}",
+        crate::world::block::name(placed),
+        o.game.last_remesh
+    );
+
     // Bedrock is the one thing that can't be broken.
     o.game.pos = DVec3::new(pos.x, WORLD_TOP as f64 + 6.5, pos.z);
     o.settle(60.0);
     let cap = [target[0], WORLD_TOP - 1, target[2]];
     o.step(0.016, &Input::default());
-    assert_eq!(o.game.raycast(), Some(cap), "ray must hit the bedrock");
+    assert_eq!(
+        o.game.raycast().map(|h| h.block),
+        Some(cap),
+        "ray must hit the bedrock"
+    );
     o.step(0.016, &input);
     assert_eq!(
         o.game.streamer.block_at(cap[0], cap[1], cap[2]),

@@ -85,6 +85,44 @@ pub fn is_breakable(b: u8) -> bool {
     b != BEDROCK
 }
 
+/// Blocks the player can place. Liquids are left out because their top faces snap to
+/// the layer's liquid level wherever they are, and bedrock because it couldn't be
+/// broken again.
+pub fn is_placeable(b: u8) -> bool {
+    is_opaque(b) && b != BEDROCK && b <= ASH
+}
+
+/// The name shown when a block is selected.
+pub fn name(b: u8) -> &'static str {
+    match b {
+        AIR => "Air",
+        STONE => "Stone",
+        COBBLE => "Cobblestone",
+        DIRT => "Dirt",
+        GRASS => "Grass",
+        SAND => "Sand",
+        WATER => "Water",
+        LOG => "Log",
+        LEAVES => "Leaves",
+        COAL => "Coal ore",
+        IRON => "Iron ore",
+        CRYSTAL => "Crystal",
+        BEDROCK => "Bedrock",
+        LAVA => "Lava",
+        DARK_GRASS => "Dark grass",
+        DARK_DIRT => "Dark dirt",
+        SLATE => "Slate",
+        MOSSY_COBBLE => "Mossy cobblestone",
+        GRAVEL => "Gravel",
+        PINE_LOG => "Pine log",
+        PINE_NEEDLES => "Pine needles",
+        BASALT => "Basalt",
+        EMBER => "Ember",
+        ASH => "Ash",
+        _ => "Unknown",
+    }
+}
+
 /// Texture layer for a block face. `dir` follows the mesher's convention:
 /// 0:+x 1:-x 2:+y 3:-y 4:+z 5:-z.
 #[inline]
@@ -156,6 +194,14 @@ mod tests {
         for (name, number) in layers {
             let line = format!("const {name}: u32 = {number}u;");
             assert!(shader.contains(&line), "terrain.wgsl needs `{line}`");
+        }
+    }
+
+    #[test]
+    fn only_solid_breakable_blocks_can_be_placed() {
+        for b in 0..=u8::MAX {
+            let expected = is_opaque(b) && is_breakable(b) && name(b) != "Unknown";
+            assert_eq!(is_placeable(b), expected, "block {b} ({})", name(b));
         }
     }
 }

@@ -116,7 +116,7 @@ pub struct Theme {
     /// Colour of the light falling on everything.
     tint: [u8; 3],
     /// Crystal colour, and its brightness in the last byte (255 is about 8 times white).
-    crystal: [u8; 4],
+    pub crystal: [u8; 4],
     /// How much of the ceiling crystal covers. 1 is scattered colonies.
     crystal_cover: f32,
     /// The least crystal any part of the ceiling has.

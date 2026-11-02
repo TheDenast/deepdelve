@@ -34,6 +34,9 @@ nix run .#play
 | Shift | Fly six times faster |
 | Mouse wheel | Change base speed |
 | Left mouse | Break block (hold to repeat, reach 96 blocks) |
+| Right mouse | Place the selected block (hold to repeat) |
+| Middle mouse | Pick the block you look at into the hotbar |
+| 1-9 | Choose a hotbar slot |
 | R | Wipe the world and generate a new one |
 | Esc | Release or recapture the mouse |
 | F1 | Toggle the stats overlay |
@@ -53,6 +56,7 @@ cargo test --release                                  # unit tests
 ./target/release/deepdelve --headless --bench 20 --bench-speed 600 --size 2560x1440
 ./target/release/deepdelve --headless --tier 2 --bench 20   # the same, in a lower layer
 ./target/release/deepdelve --headless --shot view.png@326,110,-1106,0.6,-0.12   # x,y,z,yaw,pitch
+./target/release/deepdelve --headless --hud --shot view.png        # the spawn view, with the hotbar drawn
 ```
 
 ## Documentation

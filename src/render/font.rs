@@ -72,15 +72,15 @@ pub fn draw_text(out: &mut Vec<HudRect>, text: &str, x: f32, y: f32, scale: f32,
                 while col < 5 && bits & (1 << (4 - col)) != 0 {
                     col += 1;
                 }
-                out.push(HudRect {
-                    rect: [
+                out.push(HudRect::flat(
+                    [
                         cx + start as f32 * scale,
                         y + row as f32 * scale,
                         (col - start) as f32 * scale,
                         scale,
                     ],
                     color,
-                });
+                ));
             }
         }
         cx += 6.0 * scale;

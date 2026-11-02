@@ -6,12 +6,13 @@ those.
 
 ## Current focus
 
-`a0.2.0` is out, and the user is moving on to other work. They want to experiment with features,
-one request at a time.
+For the next version, the user asked for Minecraft creative mode: block placement first, then
+collision, walking and jumping, with a key to turn collision off for free flight.
 
 ## Since the last release (`a0.2.0`)
 
-Nothing yet.
+- Block placement, a hotbar of nine blocks drawn as cube icons, and picking blocks with the middle
+  mouse button.
 
 ## Known issues
 
@@ -19,7 +20,8 @@ Nothing yet.
   the giants look right. Look at `conifer()` in `src/world/generator.rs`.
 - **Brightness is only tuned from screenshots.** The Dark Forest and Underworld may look too dark
   or too bright on a real display.
-- **The three layers haven't been checked in a real window,** only off-screen.
+- **The three layers haven't been checked in a real window,** only off-screen. Nor has placing
+  blocks: the right and middle mouse buttons and number keys are untested.
 - **The world's underside is very dim** when seen from the void below.
 - **Ground may now look too plain.** Evening out made grass and sand much smoother from a distance.
   If so, lower `PASSES` in `Canvas::even_out`, though the repeat will start to come back.
@@ -29,4 +31,6 @@ Nothing yet.
 
 ## Next
 
-- Whatever the user picks. `docs/DESIGN.md` has a list of ideas, and the issues above are open.
+- Collision, walking, jumping and swimming, with a toggle back to free flight.
+- Then whatever the user picks. `docs/DESIGN.md` has a list of ideas, and the issues above are
+  open.
