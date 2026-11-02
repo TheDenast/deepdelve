@@ -412,6 +412,9 @@ impl ApplicationHandler for App {
                         (MouseButton::Left, false) => {
                             g.inventory.release(self.cursor, &mut g.hotbar, size);
                         }
+                        (MouseButton::Right, true) => {
+                            g.inventory.right_press(self.cursor, &mut g.hotbar, size);
+                        }
                         _ => {}
                     }
                     return;

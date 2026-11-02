@@ -203,7 +203,7 @@ impl Inventory {
                 hotbar[slot] = self.items[i];
             }
             Spot::List(i) => {
-                // Holding something already, a click on the list puts it back.
+                // Holding something already, a click on the list throws it away.
                 if self.held != AIR {
                     self.held = AIR;
                 } else {
@@ -227,8 +227,8 @@ impl Inventory {
                 self.thumb_grab = Some(THUMB * 0.5);
                 self.drag_thumb(p, size);
             }
-            Spot::Window => {}
-            Spot::Outside => self.held = AIR,
+            // Clicking the panel or outside it with a block in hand throws it away.
+            Spot::Window | Spot::Outside => self.held = AIR,
         }
     }
 
@@ -247,11 +247,16 @@ impl Inventory {
             // Dragging between hotbar slots swaps them.
             (Spot::Hotbar(i), Spot::Hotbar(j)) => hotbar[j] = mem::replace(&mut hotbar[i], held),
             (Spot::Hotbar(i), _) => hotbar[i] = held,
-            // Off the window or onto the list, the block is thrown away.
-            (Spot::Outside | Spot::List(_), _) => {}
-            // Anywhere else it goes back where it came from.
-            (_, Spot::Hotbar(j)) => hotbar[j] = held,
+            // Anywhere but the hotbar, the block is thrown away.
             _ => {}
+        }
+    }
+
+    /// A right button press, which empties the hotbar slot under the pointer.
+    pub fn right_press(&mut self, p: Vec2, hotbar: &mut [u8; 9], size: (u32, u32)) {
+        self.cursor = p;
+        if let Spot::Hotbar(i) = self.spot(p, size) {
+            hotbar[i] = AIR;
         }
     }
 
@@ -524,14 +529,38 @@ mod tests {
         inv.press(hotbar_cell(0), false, &mut hotbar, 0, SIZE);
         inv.release(hotbar_cell(1), &mut hotbar, SIZE);
         assert_eq!(&hotbar[..2], &[DIRT, STONE]);
-        // Let go somewhere useless, and the block goes home.
+        // Let go on the panel or outside it, and the block is gone.
         inv.press(hotbar_cell(0), false, &mut hotbar, 0, SIZE);
         inv.release(at(2.0, 2.0), &mut hotbar, SIZE);
-        assert_eq!(hotbar[0], DIRT);
-        // Let go outside, and it's gone.
-        inv.press(hotbar_cell(0), false, &mut hotbar, 0, SIZE);
-        inv.release(at(-5.0, -5.0), &mut hotbar, SIZE);
         assert_eq!(hotbar[0], AIR);
+        inv.press(hotbar_cell(1), false, &mut hotbar, 0, SIZE);
+        inv.release(at(-5.0, -5.0), &mut hotbar, SIZE);
+        assert_eq!(hotbar[1], AIR);
+    }
+
+    #[test]
+    fn right_clicking_a_hotbar_slot_empties_it() {
+        let mut inv = long_list();
+        let mut hotbar = [STONE; 9];
+        inv.right_press(hotbar_cell(3), &mut hotbar, SIZE);
+        assert_eq!(hotbar[3], AIR);
+        inv.right_press(list_cell(0, 0), &mut hotbar, SIZE);
+        assert_eq!(
+            hotbar,
+            [STONE, STONE, STONE, AIR, STONE, STONE, STONE, STONE, STONE]
+        );
+    }
+
+    #[test]
+    fn clicking_the_panel_with_a_block_in_hand_throws_it_away() {
+        let mut inv = long_list();
+        let mut hotbar = [GRASS; 9];
+        inv.press(list_cell(1, 0), false, &mut hotbar, 0, SIZE);
+        inv.release(list_cell(1, 0), &mut hotbar, SIZE);
+        assert_eq!(inv.held, DIRT);
+        inv.press(at(2.0, 2.0), false, &mut hotbar, 0, SIZE);
+        assert_eq!(inv.held, AIR);
+        assert_eq!(hotbar, [GRASS; 9]);
     }
 
     #[test]

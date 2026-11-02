@@ -29,7 +29,8 @@ implementation and is open to change.
 | Block placement | Like Minecraft's creative mode: place, break, pick blocks into a hotbar | Player |
 | Hotbar | Nine slots chosen with 1-9, starting with common building blocks. Middle click picks the block you look at, selecting its slot if it's already there | Engineering |
 | Inventory | One window listing every placeable block, with a scrollbar, to drag onto the hotbar, as in early Minecraft's creative mode | Player |
-| Using the inventory | E opens it and E or Esc closes it. Blocks can be dragged, or clicked up and clicked down as in Minecraft. Shift-click fills the first empty hotbar slot. A block let go outside the window or over the list is thrown away, and dragging between hotbar slots swaps them | Engineering |
+| Using the inventory | E opens it and E or Esc closes it. Blocks can be dragged, or clicked up and clicked down as in Minecraft. Shift-click fills the first empty hotbar slot, and dragging between hotbar slots swaps them. A block let go or clicked anywhere but the hotbar is thrown away | Engineering |
+| Emptying the hotbar | Right-click a hotbar slot in the inventory to empty it, and click a held block onto the panel to throw it away | Player |
 | What can be placed | Every solid block but bedrock, which couldn't be broken again. Water and lava can't, because their surfaces always snap to the layer's liquid level | Engineering |
 | Movement | Collision, walking and jumping, as in Minecraft's creative mode | Player |
 | Turning collision off | One key switches to free flight through everything, and back | Player |

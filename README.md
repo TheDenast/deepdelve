@@ -40,7 +40,7 @@ nix run .#play
 | Right mouse | Place the selected block (hold to repeat) |
 | Middle mouse | Pick the block you look at into the hotbar |
 | 1-9 | Choose a hotbar slot |
-| E | Open the inventory of every block: drag or click blocks onto the hotbar, shift-click to add one |
+| E | Open the inventory of every block: drag or click blocks onto the hotbar, shift-click to add one, right-click a hotbar slot to empty it |
 | R | Wipe the world and generate a new one |
 | Esc | Close the inventory, or release and recapture the mouse |
 | F1 | Toggle the stats overlay |
