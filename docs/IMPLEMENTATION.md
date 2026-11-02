@@ -26,6 +26,7 @@ textures, as directed by our shaders and draw commands.
 | `src/mesher.rs` | Greedy mesher with ambient occlusion |
 | `src/stream.rs` | Octree of wanted chunks, worker threads, draw selection, edits |
 | `src/game.rs` | Camera, raycast, breaking and placing, hotbar, atmosphere, HUD |
+| `src/player.rs` | Walking, jumping, swimming and creative flight against the voxel grid |
 | `src/app.rs` | Window, input, presentation |
 | `src/headless.rs` | Off-screen runs: screenshots, benchmark, end-to-end test |
 | `src/render/mod.rs` | All GPU work: buffers, culling, passes |
@@ -106,6 +107,23 @@ it (up to eight chunks at a corner), since the border drives culling and AO. Tho
 synchronously on the main thread, about 1 ms, so the result shows in the same frame. Edits also go
 in a separate map that workers apply when rebuilding, so they survive unloading.
 
+## Player movement
+
+`player.rs` moves a 0.6 by 1.8 block box against the full-detail voxels, reading blocks through
+a lookup function, so its tests run on hand-built worlds. Each step is split into pieces of at
+most 1/120 s. Within one, the box sweeps along y first, then x and z, stopping at the first solid
+cell it would enter, which is exact and can't tunnel. The game's position is the eye, 1.62 above
+the feet.
+
+- **Unloaded chunks** hold the player still until they arrive, rather than counting as air or
+  rock. Spawning also waits for them, then looks down for open ground.
+- **A box already inside rock**, such as after leaving noclip there, ignores collision and drifts
+  where the keys point until it's clear.
+- **Swimming** starts when the feet are in a liquid, so a player treading water keeps their head
+  above the surface.
+- **Noclip** is the old free flight in `game.rs`, which never reads the world. Headless runs use
+  it, since tours and benchmarks place the camera directly. Only the end-to-end test walks.
+
 ## Rendering
 
 **Vertex pulling.** All quads live in one storage buffer, handled by a range allocator. A
@@ -175,13 +193,13 @@ quads drawn stay near 1M in most views, so views packed with geometry can cost m
 
 ## Verifying a change
 
-`cargo test --release` covers the mesher, allocator and octree. `deepdelve --headless` with no
-other options runs the full game path against generated terrain: it breaks a block through a
-raycast, checks the edit survives flying away and back, places a block back into the hole and
-picks it, then checks the R reset. A headless `--tour` gives screenshots of every layer and both
-ends of the world, for judging terrain and rendering changes. `--hud` adds the crosshair and hotbar
-to screenshots. Current numbers per layer, with the same settings as the 2560x1440, 120
-blocks/s row above:
+`cargo test --release` covers the mesher, allocator, octree and player movement.
+`deepdelve --headless` with no other options runs the full game path against generated terrain:
+it breaks a block through a raycast, checks the edit survives flying away and back, places a
+block back into the hole and picks it, lands on that block and jumps, then checks the R reset. A
+headless `--tour` gives screenshots of every layer and both ends of the world, for judging
+terrain and rendering changes. `--hud` adds the crosshair and hotbar to screenshots. Current
+numbers per layer, with the same settings as the 2560x1440, 120 blocks/s row above:
 
 | Layer | Frame mean | p99 | GPU terrain | Quads stored |
 | --- | --- | --- | --- | --- |

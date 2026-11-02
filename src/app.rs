@@ -35,6 +35,8 @@ struct App {
     scroll: f32,
     reset_pressed: bool,
     pick_pressed: bool,
+    jump_pressed: bool,
+    noclip_pressed: bool,
     slot_pressed: Option<usize>,
     captured: bool,
     show_hud: bool,
@@ -114,6 +116,8 @@ impl App {
             breaking: k.breaking && self.captured,
             placing: k.placing && self.captured,
             pick: self.pick_pressed,
+            jump_pressed: self.jump_pressed,
+            toggle_noclip: self.noclip_pressed,
             slot: self.slot_pressed,
             reset: self.reset_pressed,
         };
@@ -121,6 +125,8 @@ impl App {
         self.scroll = 0.0;
         self.reset_pressed = false;
         self.pick_pressed = false;
+        self.jump_pressed = false;
+        self.noclip_pressed = false;
         self.slot_pressed = None;
 
         let Some(r) = &mut self.running else { return };
@@ -338,10 +344,14 @@ impl ApplicationHandler for App {
                     KeyCode::KeyS => self.keys.back = pressed,
                     KeyCode::KeyA => self.keys.left = pressed,
                     KeyCode::KeyD => self.keys.right = pressed,
-                    KeyCode::Space => self.keys.up = pressed,
+                    KeyCode::Space => {
+                        self.keys.up = pressed;
+                        self.jump_pressed |= pressed && !event.repeat;
+                    }
                     KeyCode::KeyC | KeyCode::ControlLeft => self.keys.down = pressed,
                     KeyCode::ShiftLeft | KeyCode::ShiftRight => self.keys.sprint = pressed,
                     KeyCode::KeyR if pressed && !event.repeat => self.reset_pressed = true,
+                    KeyCode::KeyN if pressed && !event.repeat => self.noclip_pressed = true,
                     _ if pressed && hotbar_key(code).is_some() => {
                         self.slot_pressed = hotbar_key(code);
                     }
@@ -413,6 +423,8 @@ pub fn run(opts: crate::Options) {
         scroll: 0.0,
         reset_pressed: false,
         pick_pressed: false,
+        jump_pressed: false,
+        noclip_pressed: false,
         slot_pressed: None,
         captured: false,
         show_hud: true,

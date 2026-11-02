@@ -1,10 +1,11 @@
 //! Game state that doesn't depend on a window: camera, streaming and editing.
 
+use crate::player::{self, Aabb, Body, Mode, Wish};
 use crate::render::{ChunkGpu, FrameParams, HudRect, font};
 use crate::stream::{ChunkSink, Streamer};
 use crate::world::block::{
-    self, AIR, COBBLE, CRYSTAL, DIRT, GRASS, LAVA, LEAVES, LOG, SAND, SLATE, STONE, WATER,
-    face_layer, is_breakable, is_emissive, is_opaque, is_placeable,
+    self, AIR, COBBLE, CRYSTAL, DIRT, GRASS, LAVA, LEAVES, LOG, PINE_LOG, PINE_NEEDLES, SAND,
+    SLATE, STONE, WATER, face_layer, is_breakable, is_emissive, is_opaque, is_placeable,
 };
 use crate::world::generator::{WORLD_BOTTOM, WORLD_TOP};
 use crate::world::noise::{smoothstep, splitmix};
@@ -20,6 +21,10 @@ const NAME_SHOWN: f32 = 2.0;
 const HOTBAR: [u8; 9] = [
     STONE, COBBLE, DIRT, GRASS, SAND, LOG, LEAVES, SLATE, CRYSTAL,
 ];
+/// Two presses of jump closer than this toggle flight.
+const DOUBLE_TAP: f32 = 0.3;
+/// How many blocks to either side of the spawn point to look for open ground.
+const SPAWN_SEARCH: i64 = 8;
 
 #[derive(Default, Clone, Copy)]
 pub struct Input {
@@ -30,6 +35,9 @@ pub struct Input {
     pub scroll: f32,
     pub breaking: bool,
     pub placing: bool,
+    /// Jump was pressed this step, as opposed to held. Two presses toggle flight.
+    pub jump_pressed: bool,
+    pub toggle_noclip: bool,
     /// Takes the targeted block into the hotbar. Set for one step per click.
     pub pick: bool,
     /// A hotbar slot chosen directly, from the number keys.
@@ -58,6 +66,11 @@ pub struct Game {
     pub blocks_placed: u64,
     pub last_remesh: Option<(usize, f32)>,
     pub occlusion: bool,
+    pub body: Body,
+    /// Waiting to put the player on the ground, once the chunks below have loaded.
+    spawning: bool,
+    last_jump_press: f32,
+    scroll_steps: f32,
     pub hotbar: [u8; 9],
     pub slot: usize,
     slot_changed_at: f32,
@@ -86,6 +99,10 @@ impl Game {
             blocks_placed: 0,
             last_remesh: None,
             occlusion: true,
+            body: Body::new(Mode::Walk),
+            spawning: true,
+            last_jump_press: f32::MIN,
+            scroll_steps: 0.0,
             hotbar: HOTBAR,
             slot: 0,
             slot_changed_at: f32::MIN,
@@ -115,6 +132,8 @@ impl Game {
         self.blocks_placed = 0;
         self.last_remesh = None;
         self.fog_primed = false;
+        self.body.vel = DVec3::ZERO;
+        self.spawning = true;
     }
 
     pub fn forward(&self) -> Vec3 {
@@ -148,16 +167,66 @@ impl Game {
 
         self.yaw += input.look.x;
         self.pitch = (self.pitch - input.look.y).clamp(-1.55, 1.55);
+        if input.toggle_noclip {
+            self.toggle_noclip();
+        }
+        if input.jump_pressed && self.body.mode != Mode::Noclip {
+            // A double tap of jump toggles flight, as in Minecraft's creative mode.
+            if self.time - self.last_jump_press < DOUBLE_TAP {
+                self.body.mode = match self.body.mode {
+                    Mode::Fly => Mode::Walk,
+                    _ => Mode::Fly,
+                };
+                self.body.vel.y = 0.0;
+                self.last_jump_press = f32::MIN;
+            } else {
+                self.last_jump_press = self.time;
+            }
+        }
         if input.scroll != 0.0 {
-            self.speed = (self.speed * 1.25f32.powf(input.scroll)).clamp(2.0, 4000.0);
+            // As in Minecraft, the wheel sets free flight's speed and otherwise the slot.
+            if self.body.mode == Mode::Noclip {
+                self.speed = (self.speed * 1.25f32.powf(input.scroll)).clamp(2.0, 4000.0);
+            } else {
+                self.scroll_steps += input.scroll;
+                let steps = self.scroll_steps.trunc();
+                self.scroll_steps -= steps;
+                if steps != 0.0 {
+                    let n = self.hotbar.len() as i32;
+                    self.select((self.slot as i32 - steps as i32).rem_euclid(n) as usize);
+                }
+            }
         }
 
-        // Flying is relative to where the camera faces; up and down stay vertical.
         let f = self.forward();
         let right = Vec3::new(self.yaw.cos(), 0.0, self.yaw.sin());
-        let dir = f * input.axis.z + right * input.axis.x + Vec3::Y * input.axis.y;
-        let v = self.speed * if input.sprint { 6.0 } else { 1.0 };
-        self.pos += dir.as_dvec3() * (v * dt) as f64;
+        if self.body.mode == Mode::Noclip {
+            // Free flight is relative to where the camera faces; up and down stay vertical.
+            let dir = f * input.axis.z + right * input.axis.x + Vec3::Y * input.axis.y;
+            let v = self.speed * if input.sprint { 6.0 } else { 1.0 };
+            self.pos += dir.as_dvec3() * (v * dt) as f64;
+            self.spawning = false;
+        } else if self.spawning {
+            if let Some(p) = self.ground_spawn() {
+                self.pos = p;
+                self.body.mode = Mode::Walk;
+                self.spawning = false;
+            }
+        } else {
+            // Walking and creative flight follow the heading only, so that looking down
+            // doesn't slow the player.
+            let ahead = Vec3::new(self.yaw.sin(), 0.0, -self.yaw.cos());
+            let dir = (ahead * input.axis.z + right * input.axis.x).clamp_length_max(1.0);
+            let wish = Wish {
+                dir: dir.as_dvec3(),
+                up: input.axis.y as f64,
+                sprint: input.sprint,
+            };
+            let streamer = &self.streamer;
+            self.body.step(&mut self.pos, dt as f64, &wish, &|x, y, z| {
+                streamer.block_at(x, y, z)
+            });
+        }
 
         self.streamer
             .update(self.pos.to_array(), f.to_array(), dt as f64, 4000, gpu);
@@ -197,6 +266,49 @@ impl Game {
         reset
     }
 
+    /// Turns collision off, or back on. Leaving noclip starts in creative flight, so the
+    /// player doesn't drop out of the air where they stopped.
+    pub fn toggle_noclip(&mut self) {
+        self.body.mode = match self.body.mode {
+            Mode::Noclip => Mode::Fly,
+            _ => Mode::Noclip,
+        };
+        self.body.vel = DVec3::ZERO;
+    }
+
+    /// Where to stand on arrival: the ground below the spawn point, on open ground
+    /// rather than in a treetop or water if any is near. `None` until the chunks below
+    /// are loaded.
+    fn ground_spawn(&self) -> Option<DVec3> {
+        let start = self.pos.floor().as_i64vec3();
+        let mut fallback = None;
+        for r in 0..=SPAWN_SEARCH {
+            for dz in -r..=r {
+                for dx in -r..=r {
+                    if dx.abs().max(dz.abs()) != r {
+                        continue;
+                    }
+                    let (x, z) = (start.x + dx, start.z + dz);
+                    let mut y = start.y;
+                    let b = loop {
+                        let b = self.streamer.block_at(x, y, z)?;
+                        if b != AIR || y < start.y - 512 {
+                            break b;
+                        }
+                        y -= 1;
+                    };
+                    let feet = DVec3::new(x as f64 + 0.5, y as f64 + 1.0, z as f64 + 0.5);
+                    let p = feet + DVec3::Y * player::EYE;
+                    if is_opaque(b) && !matches!(b, LEAVES | LOG | PINE_NEEDLES | PINE_LOG) {
+                        return Some(p);
+                    }
+                    fallback.get_or_insert(p);
+                }
+            }
+        }
+        fallback
+    }
+
     pub fn select(&mut self, slot: usize) {
         self.slot = slot % self.hotbar.len();
         self.slot_changed_at = self.time;
@@ -228,6 +340,10 @@ impl Game {
                 .block_at(at[0], at[1], at[2])
                 .is_none_or(is_opaque)
         {
+            return;
+        }
+        // Not inside the player, unless they can pass through blocks anyway.
+        if self.body.mode != Mode::Noclip && Aabb::player(self.pos).overlaps_cell(at) {
             return;
         }
         if let Some(n) = self.streamer.set_block(at[0], at[1], at[2], block, sink) {
@@ -464,7 +580,12 @@ impl Game {
                 tier.theme.name,
                 tier.liquid_y
             ),
-            format!("SPEED {:.0}   SEED {}", self.speed, self.seed),
+            format!(
+                "MODE {}   NOCLIP SPEED {:.0}   SEED {}",
+                self.body.mode.name(),
+                self.speed,
+                self.seed
+            ),
             format!(
                 "CHUNKS {} / {}   QUEUED {}   BUILDING {}   AVG {:.0} US",
                 s.loaded, s.desired, s.queued, s.in_flight, s.avg_job_us
@@ -488,9 +609,10 @@ impl Game {
                     "BROKEN {}   PLACED {}   LAST EDIT {} CHUNKS IN {:.2} MS",
                     self.blocks_broken, self.blocks_placed, n, ms
                 ),
-                None => "WASD SPACE C MOVE   SHIFT FAST   WHEEL SPEED   R NEW WORLD".to_string(),
+                None => "WASD MOVE   SPACE JUMP, TWICE TO FLY   C DOWN   SHIFT FAST   N NOCLIP"
+                    .to_string(),
             },
-            "LMB BREAK   RMB PLACE   MMB PICK   1-9 BLOCK".to_string(),
+            "LMB BREAK   RMB PLACE   MMB PICK   1-9 OR WHEEL BLOCK   R NEW WORLD".to_string(),
         ];
         let lh = 9.0 * scale;
         for (i, line) in lines.iter().enumerate() {

@@ -1,10 +1,10 @@
 # Game design
 
 The fantasy: enormous caverns underground, with whole forests, lakes and seas in them. The
-current stage is a proof of concept, in which you fly around a generated world in spectator
-mode and can break and place blocks. Each decision below records who made it. "Player" means it was
-chosen during design consultation; "engineering" means it was left to implementation and
-is open to change.
+current stage is a proof of concept, in which you walk and fly around a generated world and
+break and place blocks, as in Minecraft's creative mode. Each decision below records who made
+it. "Player" means it was chosen during design consultation; "engineering" means it was left to
+implementation and is open to change.
 
 ## Decisions
 
@@ -29,6 +29,13 @@ is open to change.
 | Block placement | Like Minecraft's creative mode: place, break, pick blocks into a hotbar | Player |
 | Hotbar | Nine slots chosen with 1-9, starting with common building blocks. Middle click picks the block you look at, selecting its slot if it's already there | Engineering |
 | What can be placed | Every solid block but bedrock, which couldn't be broken again. Water and lava can't, because their surfaces always snap to the layer's liquid level | Engineering |
+| Movement | Collision, walking and jumping, as in Minecraft's creative mode | Player |
+| Turning collision off | One key switches to free flight through everything, and back | Player |
+| Movement modes | Walking; creative flight, started by pressing jump twice and ended by landing; noclip on N. Leaving noclip starts creative flight, so the player doesn't drop from where they stopped | Engineering |
+| Movement numbers | Minecraft's: a 0.6 by 1.8 block body, walking at 4.3 blocks/s, jumps of about 1.27 blocks, flight at 11. Sprinting flies three times faster rather than twice, since caverns are kilometres across | Engineering |
+| Keys for movement | The existing ones: Shift sprints and C or Ctrl goes down or sneaks, the reverse of Minecraft | Engineering |
+| Swimming | Water slows the player and they slowly sink. Swimming up against a wall climbs out onto a ledge one block above the surface. Lava is the same but thicker | Engineering |
+| Spawning | On open ground below the old spawn point, avoiding treetops and water when there's ground nearby | Engineering |
 | Controls, flight speeds, reach of 96 blocks | See the table in the README | Engineering |
 
 ## World structure
@@ -78,17 +85,17 @@ mountains, and a few embers glow in the ceiling.
 
 ## Known simplifications at this stage
 
-- No collision, no inventory screen, no creatures. The hotbar only fills by picking blocks from
-  the world.
+- No inventory screen, no creatures, no health or fall damage. The hotbar only fills by picking
+  blocks from the world. Sneaking doesn't lower the camera, and there's no auto-jump.
 - Crystal and lava don't cast local light. They look like they do because the ambient field
   follows them at large scale, but a single colony you carve free or place won't brighten what's
   nearby.
 - Edits exist only at full detail: chunks beyond 384 blocks show the unedited world, so placed
   blocks vanish there too. Edits also aren't saved to disk, and R discards them.
 - Breaking a block below the water line leaves a hole of air beside a standing wall of water,
-  and lava behaves the same. Touching lava does nothing, since there's no health or collision.
+  and lava behaves the same. Swimming in lava does no harm, since there's no health.
 
 ## Ideas for later
 
 Flowing water and lava; tunnels joining caverns horizontally; local light from crystal and lava;
-collision and walking; ground plants; biomes within a layer.
+ground plants; biomes within a layer; an inventory screen; auto-jump.

@@ -2,6 +2,7 @@
 //! benchmarks and an end-to-end block-breaking test.
 
 use crate::game::{Game, Input};
+use crate::player::{self, Mode};
 use crate::render::{MAX_SLOTS, POOL_QUADS, Renderer};
 use crate::world::block::{BEDROCK, is_opaque};
 use crate::world::generator::{WORLD_BOTTOM, WORLD_TOP};
@@ -151,6 +152,8 @@ pub fn run(opts: crate::Options) {
     println!("deepdelve {}", crate::version());
     println!("seed {}  spawn {:?}", opts.seed, game.pos.to_array());
     game.occlusion = opts.occlusion;
+    // Views and benchmarks put the camera where they want it, which needs free flight.
+    game.body.mode = Mode::Noclip;
     let mut o = Offscreen {
         renderer,
         game,
@@ -470,6 +473,8 @@ fn break_test(o: &mut Offscreen) {
         o.game.last_remesh
     );
 
+    walk_test(o, pos, target);
+
     // Bedrock is the one thing that can't be broken.
     o.game.pos = DVec3::new(pos.x, WORLD_TOP as f64 + 6.5, pos.z);
     o.settle(60.0);
@@ -509,4 +514,74 @@ fn break_test(o: &mut Offscreen) {
         s.loaded,
         s.used_quads as f64 / 1.0e6
     );
+}
+
+/// Walking against real terrain: lands on the block placed in `target`, jumps, refuses
+/// to place a block inside the player, and switches modes. Leaves the player in noclip.
+fn walk_test(o: &mut Offscreen, pos: DVec3, target: [i64; 3]) {
+    const DT: f32 = 1.0 / 60.0;
+    let ground = target[1] as f64 + 1.0;
+    let feet = |o: &Offscreen| o.game.pos.y - player::EYE;
+    o.game.body.mode = Mode::Walk;
+    o.game.pos = DVec3::new(pos.x, ground + 4.0 + player::EYE, pos.z);
+    for _ in 0..120 {
+        o.step(DT, &Input::default());
+    }
+    assert!(
+        o.game.body.on_ground && (feet(o) - ground).abs() < 1e-6,
+        "must land on the placed block: feet {} over ground {ground}",
+        feet(o)
+    );
+
+    let jump = Input {
+        axis: Vec3::Y,
+        jump_pressed: true,
+        ..Default::default()
+    };
+    o.step(DT, &jump);
+    let mut peak = 0f64;
+    for _ in 0..60 {
+        o.step(DT, &Input::default());
+        peak = peak.max(feet(o) - ground);
+    }
+    assert!(peak > 1.1 && peak < 1.5, "jump peaked {peak} blocks up");
+    assert!((feet(o) - ground).abs() < 1e-6, "must land again");
+
+    // Looking straight down, a new block would go where the player's feet are.
+    o.game.pitch = -1.55;
+    o.step(
+        DT,
+        &Input {
+            placing: true,
+            ..Default::default()
+        },
+    );
+    let at_feet = o
+        .game
+        .streamer
+        .block_at(target[0], target[1] + 1, target[2]);
+    assert!(
+        !at_feet.is_some_and(is_opaque),
+        "must not place inside the player"
+    );
+
+    // A double tap of jump starts flight, and N turns collision off and back on.
+    o.step(DT, &jump);
+    o.step(DT, &Input::default());
+    o.step(DT, &jump);
+    assert_eq!(o.game.body.mode, Mode::Fly, "double tap must start flight");
+    let noclip = Input {
+        toggle_noclip: true,
+        ..Default::default()
+    };
+    o.step(DT, &noclip);
+    assert_eq!(o.game.body.mode, Mode::Noclip);
+    o.step(DT, &noclip);
+    assert_eq!(
+        o.game.body.mode,
+        Mode::Fly,
+        "leaving noclip must keep flying"
+    );
+    o.game.body.mode = Mode::Noclip;
+    println!("walk test ok: landed, jumped {peak:.2} blocks, switched modes");
 }

@@ -2,9 +2,10 @@
 
 A tech demo of an underground voxel world in Rust and wgpu. There is no surface: only three
 stacked layers of caverns a kilometre or two across, sealed between bedrock with void beyond.
-You start in the Overworld, with green forests and lakes under a sky of blue crystal. Below
-it lie the Dark Forest and the lava-lit Underworld. Chunks are true 3D and generate in a
-sphere around you, with terrain visible about 4 km away.
+You start in the Overworld, with green forests and lakes under a sky of blue crystal. Below it
+lie the Dark Forest and the lava-lit Underworld. You walk, fly and build as in Minecraft's
+creative mode. Chunks are true 3D and generate in a sphere around you, with terrain visible
+about 4 km away.
 
 ## Running
 
@@ -29,10 +30,12 @@ nix run .#play
 | Input | Action |
 | --- | --- |
 | Mouse | Look |
-| W A S D | Fly |
-| Space / C or Left Ctrl | Up / down |
-| Shift | Fly six times faster |
-| Mouse wheel | Change base speed |
+| W A S D | Walk, or fly |
+| Space | Jump, swim up, or fly up. Press twice quickly to start or stop flying |
+| C or Left Ctrl | Sneak, which stops you walking off edges, or fly down |
+| Shift | Sprint. In noclip, fly six times faster |
+| N | Noclip: fly through everything. Press again to collide, flying |
+| Mouse wheel | Choose a hotbar slot. In noclip, change flight speed |
 | Left mouse | Break block (hold to repeat, reach 96 blocks) |
 | Right mouse | Place the selected block (hold to repeat) |
 | Middle mouse | Pick the block you look at into the hotbar |

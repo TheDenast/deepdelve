@@ -4,6 +4,7 @@ mod app;
 mod game;
 mod headless;
 mod mesher;
+mod player;
 mod render;
 mod stream;
 mod world;

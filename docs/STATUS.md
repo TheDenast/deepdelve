@@ -6,13 +6,15 @@ those.
 
 ## Current focus
 
-For the next version, the user asked for Minecraft creative mode: block placement first, then
-collision, walking and jumping, with a key to turn collision off for free flight.
+For the next version, the user asked for Minecraft's creative mode: block placement, then
+collision, walking and jumping, with a key to turn collision off for free flight. Both are done.
 
 ## Since the last release (`a0.2.0`)
 
 - Block placement, a hotbar of nine blocks drawn as cube icons, and picking blocks with the middle
   mouse button.
+- Collision, walking, jumping, sneaking and swimming, creative flight on a double tap of Space,
+  and N for noclip, the old free flight. The player now spawns on the ground.
 
 ## Known issues
 
@@ -20,8 +22,10 @@ collision, walking and jumping, with a key to turn collision off for free flight
   the giants look right. Look at `conifer()` in `src/world/generator.rs`.
 - **Brightness is only tuned from screenshots.** The Dark Forest and Underworld may look too dark
   or too bright on a real display.
-- **The three layers haven't been checked in a real window,** only off-screen. Nor has placing
-  blocks: the right and middle mouse buttons and number keys are untested.
+- **The three layers haven't been checked in a real window,** only off-screen.
+- **Building and walking haven't been played.** Every new key and mouse button is untested in a
+  real window, and the movement numbers (speeds, jump, acceleration, the 0.3 s double tap) only
+  match Minecraft on paper. They're constants at the top of `src/player.rs`.
 - **The world's underside is very dim** when seen from the void below.
 - **Ground may now look too plain.** Evening out made grass and sand much smoother from a distance.
   If so, lower `PASSES` in `Canvas::even_out`, though the repeat will start to come back.
@@ -31,6 +35,6 @@ collision, walking and jumping, with a key to turn collision off for free flight
 
 ## Next
 
-- Collision, walking, jumping and swimming, with a toggle back to free flight.
+- The user plays the new version, and movement gets tuned from their feedback.
 - Then whatever the user picks. `docs/DESIGN.md` has a list of ideas, and the issues above are
   open.
