@@ -7,6 +7,8 @@ lie the Dark Forest and the lava-lit Underworld. You walk, fly and build as in M
 creative mode. Chunks are true 3D and generate in a sphere around you, with terrain visible
 about 4 km away.
 
+<img width="800" height="450" alt="out" src="https://github.com/user-attachments/assets/16ae8b51-d7ba-4b44-b1a8-c27429b0d8d8" />
+
 ## Running
 
 Requires Nix with flakes enabled, on NixOS or anywhere else with Vulkan drivers.
